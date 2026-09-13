@@ -1,0 +1,29 @@
+{
+  "name": "the-verge-finance-business-os",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --pretty false",
+    "test:domain": "tsc --module nodenext --target ES2022 --moduleResolution nodenext --outDir .tmp-test src/domain/*.ts src/test/domain.spec.ts && node .tmp-test/test/domain.spec.js",
+    "clean:test": "node -e \"require('fs').rmSync('.tmp-test',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "dexie": "^4.2.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "@neondatabase/serverless": "^1.0.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.7.0",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.4",
+    "@vercel/node": "^5.3.24"
+  },
+  "engines": {
+    "node": "24.x"
+  }
+}

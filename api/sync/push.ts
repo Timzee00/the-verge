@@ -3,6 +3,7 @@ import { db, transactionPool } from '../_db';
 import { json, method, requireUser } from '../_http';
 
 const ALLOWED = new Set(['inventory_event', 'product', 'customer', 'sale', 'expense']);
+const PERMISSION_BY_ENTITY: Record<string,string> = { inventory_event:'inventory.write', product:'inventory.write', customer:'business.write', sale:'sales.write', expense:'finance.write' };
 const WRITE_ROLES = new Set(['business_owner', 'platform_admin', 'manager', 'cashier', 'inventory_staff', 'accountant']);
 
 function errorText(error: unknown) { return String((error as any)?.message ?? error); }

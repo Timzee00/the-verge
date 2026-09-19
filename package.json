@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run typecheck && vite build",
+    "build": "npm run typecheck && npm run typecheck:api && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit --pretty false",
+    "typecheck:api": "tsc -p tsconfig.api.json --noEmit --pretty false",
     "test:domain": "tsc --module nodenext --target ES2022 --moduleResolution nodenext --outDir .tmp-test src/domain/*.ts src/test/domain.spec.ts && node .tmp-test/test/domain.spec.js",
     "clean:test": "node -e \"require('fs').rmSync('.tmp-test',{recursive:true,force:true})\""
   },

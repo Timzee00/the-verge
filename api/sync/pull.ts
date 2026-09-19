@@ -34,10 +34,6 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   const ids:Record<string,string[]>={};
   for(const row of changes as any[]){ const kind=String(row.entity_type); (ids[kind]??=[]).push(String(row.entity_id)); }
   const inList=(values:string[])=>sql.join(values.map(v=>sql`${v}`),sql`,`);
-  const locationFilter = PLATFORM_ROLES.has(role)
-    ? sql`true`
-    : sql`exists (select 1 from membership_locations ml where ml.membership_id=${membershipId} and ml.location_id=${sql}.location_id and ml.active=true)`;
-
   const products=ids.product?.length?await sql`select id,organization_id,sku,barcode,name,brand,category,unit,weight_value as "weightValue",weight_unit as "weightUnit",image_url as "imageUri",standard_cost_minor as "standardCostMinor",retail_price_minor as "retailPriceMinor",wholesale_price_minor as "wholesalePriceMinor",minimum_price_minor as "minimumPriceMinor",reorder_level as "reorderLevel",active,track_batch as "trackBatch",track_expiry as "trackExpiry",created_at as "createdAt",updated_at as "updatedAt" from products where organization_id=${organizationId} and id in (${inList(ids.product)}) order by id`:[];
   const locations=ids.location?.length?(PLATFORM_ROLES.has(role)
     ? await sql`select id,organization_id as "organizationId",name,type,parent_id as "parentId",active from locations where organization_id=${organizationId} and id in (${inList(ids.location)}) order by name`

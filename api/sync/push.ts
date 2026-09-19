@@ -43,15 +43,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const sql = db();
-  const membership = await sql`select role from memberships where organization_id=${organizationId} and user_id=${user.id} and active=true limit 1`;
-  if (!membership.length || !WRITE_ROLES.has(String(membership[0].role))) return json(res, 403, { error: 'forbidden' });
+  const membership = await sql`select m.id as membership_id,m.role,o.status from memberships m join organizations o on o.id=m.organization_id where m.organization_id=${organizationId} and m.user_id=${user.id} and m.active=true limit 1`;
+  if (!membership.length || String(membership[0].status)!=='active') return json(res, 403, { error: 'forbidden' });
 
   const results: any[] = [];
+  const role=String(membership[0].role);
+  const membershipId=String(membership[0].membership_id);
   for (const op of operations) {
-    if (!op || typeof op !== 'object' || !ALLOWED.has(op.entity) || op.operation !== 'create' || typeof op.entityId !== 'string' || typeof op.deviceId !== 'string' || !Number.isInteger(op.localSequence) || op.localSequence < 0) {
+    if (!op || typeof op !== 'object' || !ALLOWED.has(op.entity) || op.operation !== 'create' || typeof op.id !== 'string' || typeof op.entityId !== 'string' || typeof op.deviceId !== 'string' || !Number.isInteger(op.localSequence) || op.localSequence < 0 || (op.organizationId && op.organizationId!==organizationId)) {
       results.push({ id: (op as any)?.id ?? null, ok: false, rejected: true, error: 'invalid_operation' });
       continue;
     }
+    const permission=PERMISSION_BY_ENTITY[String(op.entity)];
+    if(!roleCan(role,permission)){ results.push({id:op.id,ok:false,rejected:true,error:'forbidden'}); continue; }
 
     const pool = transactionPool();
     try {

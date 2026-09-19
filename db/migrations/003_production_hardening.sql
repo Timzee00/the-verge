@@ -87,6 +87,31 @@ drop trigger if exists customers_touch_updated_at on customers;
 create trigger customers_touch_updated_at before update on customers
 for each row execute function touch_updated_at();
 
+create table if not exists api_credentials (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references organizations(id) on delete cascade,
+  created_by uuid references app_users(id) on delete set null,
+  name text not null,
+  key_prefix text not null,
+  secret_hash text not null unique,
+  scopes text[] not null default '{}',
+  created_at timestamptz not null default now(),
+  expires_at timestamptz,
+  revoked_at timestamptz,
+  last_used_at timestamptz,
+  check (cardinality(scopes) <= 20)
+);
+create index if not exists api_credentials_org_idx on api_credentials(organization_id,revoked_at,expires_at);
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname='sales_total_math') then
+    alter table sales add constraint sales_total_math check (total_minor = subtotal_minor - discount_minor);
+  end if;
+  if not exists (select 1 from pg_constraint where conname='sale_item_discount_bound') then
+    alter table sale_items add constraint sale_item_discount_bound check (discount_minor <= unit_price_minor * quantity);
+  end if;
+end $$;
+
 create or replace function enforce_inventory_scope() returns trigger language plpgsql as $$
 begin
   if not exists (
@@ -100,6 +125,12 @@ begin
     where p.id = new.product_id and p.organization_id = new.organization_id
   ) then
     raise exception 'product_ownership_check_failed';
+  end if;
+  if new.event_type in ('opening','purchase','return','sale_void','transfer_in','reservation','reservation_release') and new.quantity_delta <= 0 then
+    raise exception 'invalid_inventory_direction';
+  end if;
+  if new.event_type in ('sale','damage','transfer_out') and new.quantity_delta >= 0 then
+    raise exception 'invalid_inventory_direction';
   end if;
   return new;
 end $$;

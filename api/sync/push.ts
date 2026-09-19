@@ -166,6 +166,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) on conflict (id) do nothing`, [event.id,organizationId,event.locationId,event.productId,event.type,event.quantityDelta,event.unitCostMinor??null,event.referenceId??sale.id,event.occurredAt,event.deviceId,event.localSequence,event.createdAt??sale.createdAt,user.id]);
           await change(pool,organizationId,'inventory_event',event.id);
         }
+        await audit(pool,organizationId,user.id,'sale.created','sale',sale.id,{...sale,subtotalMinor:authoritativeSubtotal,discountMinor:authoritativeDiscount,totalMinor:authoritativeTotal,belowCost:authoritativeBelowCost});
+        await change(pool,organizationId,'sale',sale.id);
       } else {
         const expense = p;
         if (!expense.id || !expense.category || !expense.description || !Number.isFinite(Number(expense.amountMinor)) || Number(expense.amountMinor) <= 0) throw new Error('invalid_expense_payload');

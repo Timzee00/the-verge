@@ -8,7 +8,7 @@ const MAX_FAILURES = 8;
 const BLOCK_MINUTES = 15;
 
 function clientAddress(req: VercelRequest) {
-  return req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || 'unknown';
+  return req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || null;
 }
 
 export default async function handler(req:VercelRequest,res:VercelResponse){
@@ -17,7 +17,8 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
     const email=cleanEmail(req.body?.email);
     const password=cleanPassword(req.body?.password);
     const sql=db();
-    const key=hashToken(`login:${email}:${clientAddress(req)}`);
+    const ipHint=clientAddress(req);
+    const key=hashToken(`login:${email}:${ipHint??'unknown'}`);
 
     const limit=await sql`select blocked_until, failures, window_started_at from auth_rate_limits where key_hash=${key} limit 1`;
     const row=limit[0] as any;
@@ -64,7 +65,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
 
     await sql`delete from auth_rate_limits where key_hash=${key}`;
     const token=newToken();
-    await sql`insert into user_sessions (user_id,token_hash,expires_at,ip_hint,user_agent) values (${user.id},${hashToken(token)},now()+interval '30 days',${clientAddress(req)},${req.headers['user-agent']??null})`;
+    await sql`insert into user_sessions (user_id,token_hash,expires_at,ip_hint,user_agent) values (${user.id},${hashToken(token)},now()+interval '30 days',${ipHint},${req.headers['user-agent']??null})`;
     setSessionCookie(res,token,60*60*24*30,isHttps(req));
     return json(res,200,{user:{id:user.id,email:user.email,displayName:user.display_name}});
   }catch{

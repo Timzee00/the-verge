@@ -4,7 +4,31 @@ import { json, method, requireUser } from '../_http';
 
 const ALLOWED = new Set(['inventory_event', 'product', 'customer', 'sale', 'expense']);
 const PERMISSION_BY_ENTITY: Record<string,string> = { inventory_event:'inventory.write', product:'inventory.write', customer:'business.write', sale:'sales.write', expense:'finance.write' };
-const WRITE_ROLES = new Set(['business_owner', 'platform_admin', 'manager', 'cashier', 'inventory_staff', 'accountant']);
+const ROLE_PERMISSIONS: Record<string, Set<string>> = {
+  business_owner: new Set(['business.write','inventory.write','sales.write','sales.void','finance.read','finance.write','staff.manage','api.manage']),
+  manager: new Set(['business.write','inventory.write','sales.write','sales.void','finance.read']),
+  cashier: new Set(['business.read','inventory.read','sales.write']),
+  inventory_staff: new Set(['business.read','inventory.read','inventory.write']),
+  accountant: new Set(['business.read','finance.read','finance.write']),
+  platform_admin: new Set(['business.write','inventory.write','sales.write','sales.void','finance.read','finance.write','staff.manage','api.manage','billing.manage','security.manage'])
+};
+const INVENTORY_SIGN: Record<string,'positive'|'negative'|'any'> = {
+  opening:'positive', purchase:'positive', sale:'negative', sale_void:'positive', return:'positive',
+  damage:'negative', adjustment:'any', transfer_out:'negative', transfer_in:'positive',
+  reservation:'positive', reservation_release:'positive'
+};
+function roleCan(role:string, permission:string){ return ROLE_PERMISSIONS[role]?.has(permission) ?? false; }
+function hasSafeMinor(value:unknown){ return Number.isSafeInteger(value) && Number(value)>=0; }
+function locationAllowed(pool:any, role:string, membershipId:string, organizationId:string, locationId:string){
+  if(role==='platform_admin') return Promise.resolve(true);
+  return pool.query('select 1 from membership_locations ml join locations l on l.id=ml.location_id where ml.membership_id=$1 and ml.location_id=$2 and ml.active=true and l.organization_id=$3 and l.active=true limit 1',[membershipId,locationId,organizationId]).then((r:any)=>Boolean(r.rowCount));
+}
+async function audit(pool:any, organizationId:string, userId:string, action:string, entityType:string, entityId:string, after:any, reason?:string){
+  await pool.query('insert into audit_events (organization_id,actor_user_id,action,entity_type,entity_id,after_data,reason) values ($1,$2,$3,$4,$5,$6::jsonb,$7)',[organizationId,userId,action,entityType,entityId,JSON.stringify(after??null),reason??null]);
+}
+async function change(pool:any, organizationId:string, entityType:string, entityId:string){
+  await pool.query('insert into sync_changes (organization_id,entity_type,entity_id) values ($1,$2,$3)',[organizationId,entityType,entityId]);
+}
 
 function errorText(error: unknown) { return String((error as any)?.message ?? error); }
 

@@ -31,6 +31,7 @@ async function change(pool:any, organizationId:string, entityType:string, entity
 }
 
 function errorText(error: unknown) { return String((error as any)?.message ?? error); }
+function pIdentity(payload:any, entityId:string, organizationId:string, deviceId:string){ if(!payload||payload.id!==entityId||(payload.organizationId&&payload.organizationId!==organizationId)||(payload.deviceId&&payload.deviceId!==deviceId)) return 'operation_identity_mismatch'; return ''; }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!method(req, res, ['POST'])) return;
@@ -71,9 +72,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!p || typeof p !== 'object') throw new Error('invalid_payload');
 
       if (op.entity === 'inventory_event') {
+        if (pIdentity(op.payload, op.entityId, organizationId, op.deviceId)) throw new Error(pIdentity(op.payload, op.entityId, organizationId, op.deviceId)!);
+        const eventType=(op.payload as any)?.type;
+        const delta=(op.payload as any)?.quantityDelta;
+        const direction=(INVENTORY_SIGN as any)[eventType];
+        if(!direction || !Number.isFinite(delta) || delta===0 || (direction==='positive'&&delta<=0) || (direction==='negative'&&delta>=0)) throw new Error('invalid_inventory_direction');
         const owned = await pool.query('select p.id from products p join locations l on l.id=$2 and l.organization_id=$3 where p.id=$1 and p.organization_id=$3 limit 1', [p.productId, p.locationId, organizationId]);
         if (!owned.rowCount) throw new Error('ownership_check_failed');
 
+        if (!(await locationAllowed(pool,role,membershipId,organizationId,p.locationId))) throw new Error('location_forbidden');
         if (p.type === 'sale') {
           await pool.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [`inventory:${organizationId}:${p.locationId}:${p.productId}`]);
           const stockResult = await pool.query(`

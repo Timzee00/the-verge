@@ -22,6 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await pool.query("insert into organizations (id,name,base_currency,industry) values ($1,$2,'NGN',$3)", [orgId, organizationName, industry]);
       await pool.query("insert into locations (id,organization_id,name,type,code) values ($1,$2,$3,'branch','MAIN')", [locationId, orgId, locationName]);
       await pool.query("insert into memberships (id,organization_id,user_id,role,active) values ($1,$2,$3,'business_owner',true)", [membershipId, orgId, userId]);
+      await pool.query("insert into membership_locations (membership_id,location_id,active) values ($1,$2,true)", [membershipId, locationId]);
       await pool.query("insert into user_sessions (user_id,token_hash,expires_at,ip_hint,user_agent) values ($1,$2,now()+interval '30 days',$3,$4)", [userId, hashToken(token), req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() ?? null, req.headers['user-agent'] ?? null]);
       await pool.query('COMMIT');
     } catch (error) {
@@ -33,6 +34,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     setSessionCookie(res, token, 60 * 60 * 24 * 30, isHttps(req));
     return json(res, 201, { user: { id: userId, email, displayName }, organization: { id: orgId, name: organizationName, industry }, location: { id: locationId, name: locationName } });
   } catch (error: any) {
-    const msg = String(error?.message ?? error); if (msg.includes('app_users_email_key')) return json(res,409,{error:'email_in_use'}); return json(res,400,{error:msg});
+    const msg = String(error?.message ?? error); if (msg.includes('app_users_email_key')) return json(res,409,{error:'email_in_use'}); return json(res,400,{error:'invalid_registration'});
   }
 }

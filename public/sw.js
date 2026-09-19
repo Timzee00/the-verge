@@ -1,5 +1,5 @@
-const VERSION = 'the-verge-shell-v2';
-const SHELL = ['/', '/index.html', '/manifest.webmanifest'];
+const VERSION = 'the-verge-shell-v3';
+const PRECACHE_URLS = [];
 
 function isSameOrigin(requestUrl) {
   return requestUrl.origin === self.location.origin;
@@ -7,10 +7,6 @@ function isSameOrigin(requestUrl) {
 
 function isApiRequest(requestUrl) {
   return requestUrl.pathname === '/api' || requestUrl.pathname.startsWith('/api/');
-}
-
-function isStaticAsset(requestUrl) {
-  return requestUrl.pathname.startsWith('/assets/');
 }
 
 async function putInCache(request, response) {
@@ -23,7 +19,7 @@ async function putInCache(request, response) {
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(VERSION)
-      .then((cache) => cache.addAll(SHELL))
+      .then((cache) => cache.addAll(PRECACHE_URLS))
       .then(() => self.skipWaiting())
   );
 });
@@ -52,25 +48,18 @@ self.addEventListener('fetch', (event) => {
 
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
-        .then((response) => putInCache(new Request('/index.html'), response))
-        .catch(async () => (await caches.match('/index.html')) ?? Response.error())
-    );
-    return;
-  }
-
-  if (isStaticAsset(url) || url.pathname === '/manifest.webmanifest' || url.pathname.startsWith('/icons/')) {
-    event.respondWith(
-      caches.match(request).then((cached) =>
-        cached ?? fetch(request).then((response) => putInCache(request, response))
-      )
+      caches.match('/index.html')
+        .then((cached) => cached ?? fetch(request)
+          .then((response) => putInCache(new Request('/index.html'), response))
+        )
+        .catch(() => caches.match('/index.html').then((cached) => cached ?? Response.error()))
     );
     return;
   }
 
   event.respondWith(
-    fetch(request)
-      .then((response) => putInCache(request, response))
-      .catch(async () => (await caches.match(request)) ?? Response.error())
+    caches.match(request).then((cached) =>
+      cached ?? fetch(request).then((response) => putInCache(request, response))
+    )
   );
 });

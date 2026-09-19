@@ -103,9 +103,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await pool.query(`insert into products (id,organization_id,sku,barcode,name,brand,category,unit,weight_value,weight_unit,image_url,standard_cost_minor,retail_price_minor,wholesale_price_minor,minimum_price_minor,reorder_level,active,track_batch,track_expiry,created_at,updated_at)
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
           on conflict (id) do nothing`, [p.id,organizationId,p.sku,p.barcode??null,p.name,p.brand??null,p.category??null,p.unit,p.weightValue??null,p.weightUnit??null,p.imageUri??null,p.standardCostMinor,p.retailPriceMinor,p.wholesalePriceMinor??null,p.minimumPriceMinor??null,p.reorderLevel??null,p.active,p.trackBatch,p.trackExpiry,p.createdAt,p.updatedAt]);
+        await audit(pool,organizationId,user.id,'product.created','product',p.id,p);
+        await change(pool,organizationId,'product',p.id);
       } else if (op.entity === 'customer') {
         await pool.query(`insert into customers (id,organization_id,name,phone,email,credit_limit_minor,active,created_at,updated_at)
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict (id) do nothing`, [p.id,organizationId,p.name,p.phone??null,p.email??null,p.creditLimitMinor??null,p.active,p.createdAt,p.updatedAt]);
+        await audit(pool,organizationId,user.id,'customer.created','customer',p.id,p);
+        await change(pool,organizationId,'customer',p.id);
       } else if (op.entity === 'sale') {
         const sale = p.sale; const items = Array.isArray(p.items) ? p.items : (p.item ? [p.item] : []);
         if (!sale || !items.length || sale.id!==op.entityId) throw new Error('invalid_sale_payload');
@@ -171,6 +175,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         await pool.query(`insert into expenses (id,organization_id,location_id,amount_minor,category,description,payment_method,occurred_at,device_id,created_at,created_by)
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) on conflict (id) do nothing`, [expense.id,organizationId,expense.locationId??null,expense.amountMinor,expense.category,expense.description,expense.paymentMethod,expense.occurredAt,expense.deviceId,expense.createdAt,user.id]);
+        await audit(pool,organizationId,user.id,'expense.created','expense',expense.id,expense);
+        await change(pool,organizationId,'expense',expense.id);
       }
 
       await pool.query(`insert into sync_receipts (organization_id,device_id,local_sequence,entity_type,entity_id)

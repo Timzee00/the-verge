@@ -45,6 +45,12 @@ on conflict do nothing;
 insert into sync_changes (organization_id, entity_type, entity_id, changed_at)
 select organization_id, 'sale', id, created_at from sales
 on conflict do nothing;
+insert into sync_changes (organization_id, entity_type, entity_id, changed_at)
+select organization_id, 'customer', id, created_at from customers
+on conflict do nothing;
+insert into sync_changes (organization_id, entity_type, entity_id, changed_at)
+select organization_id, 'expense', id, created_at from expenses
+on conflict do nothing;
 
 create table if not exists auth_rate_limits (
   key_hash text primary key,

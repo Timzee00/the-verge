@@ -107,12 +107,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
           on conflict (id) do nothing`, [p.id, organizationId, p.locationId, p.productId, p.type, p.quantityDelta, p.unitCostMinor ?? null, p.referenceId ?? null, p.occurredAt, op.deviceId, op.localSequence, p.createdAt ?? new Date().toISOString(), user.id]);
       } else if (op.entity === 'product') {
+        if(p.id!==op.entityId || (p.organizationId&&p.organizationId!==organizationId) || typeof p.sku!=='string' || !p.sku.trim() || typeof p.name!=='string' || !p.name.trim() || typeof p.unit!=='string' || !p.unit.trim()) throw new Error('invalid_product');
+        if(!hasSafeMinor(p.standardCostMinor)||!hasSafeMinor(p.retailPriceMinor) || (p.wholesalePriceMinor!=null&&!hasSafeMinor(p.wholesalePriceMinor)) || (p.minimumPriceMinor!=null&&!hasSafeMinor(p.minimumPriceMinor))) throw new Error('invalid_product');
         await pool.query(`insert into products (id,organization_id,sku,barcode,name,brand,category,unit,weight_value,weight_unit,image_url,standard_cost_minor,retail_price_minor,wholesale_price_minor,minimum_price_minor,reorder_level,active,track_batch,track_expiry,created_at,updated_at)
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
           on conflict (id) do nothing`, [p.id,organizationId,p.sku,p.barcode??null,p.name,p.brand??null,p.category??null,p.unit,p.weightValue??null,p.weightUnit??null,p.imageUri??null,p.standardCostMinor,p.retailPriceMinor,p.wholesalePriceMinor??null,p.minimumPriceMinor??null,p.reorderLevel??null,p.active,p.trackBatch,p.trackExpiry,p.createdAt,p.updatedAt]);
         await audit(pool,organizationId,user.id,'product.created','product',p.id,p);
         await change(pool,organizationId,'product',p.id);
       } else if (op.entity === 'customer') {
+        if(p.id!==op.entityId || (p.organizationId&&p.organizationId!==organizationId) || typeof p.name!=='string' || !p.name.trim()) throw new Error('invalid_customer');
+        if(p.creditLimitMinor!=null&&!hasSafeMinor(p.creditLimitMinor)) throw new Error('invalid_customer');
         await pool.query(`insert into customers (id,organization_id,name,phone,email,credit_limit_minor,active,created_at,updated_at)
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict (id) do nothing`, [p.id,organizationId,p.name,p.phone??null,p.email??null,p.creditLimitMinor??null,p.active,p.createdAt,p.updatedAt]);
         await audit(pool,organizationId,user.id,'customer.created','customer',p.id,p);
@@ -177,7 +181,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await change(pool,organizationId,'sale',sale.id);
       } else {
         const expense = p;
-        if (!expense.id || !expense.category || !expense.description || !Number.isFinite(Number(expense.amountMinor)) || Number(expense.amountMinor) <= 0) throw new Error('invalid_expense_payload');
+        if (expense.id!==op.entityId || (expense.organizationId&&expense.organizationId!==organizationId) || !expense.category || !expense.description || !hasSafeMinor(expense.amountMinor) || Number(expense.amountMinor) <= 0) throw new Error('invalid_expense_payload');
+        if(!['cash','bank','transfer','card'].includes(expense.paymentMethod)) throw new Error('invalid_expense_payment');
         if (expense.locationId) {
           const location = await pool.query('select 1 from locations where id=$1 and organization_id=$2 limit 1', [expense.locationId, organizationId]);
           if (!location.rowCount) throw new Error('location_ownership_check_failed');

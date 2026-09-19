@@ -81,6 +81,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!owned.rowCount) throw new Error('ownership_check_failed');
 
         if (!(await locationAllowed(pool,role,membershipId,organizationId,p.locationId))) throw new Error('location_forbidden');
+        const duplicateEvent=await pool.query('select id from inventory_events where id=$1 and organization_id=$2 limit 1',[p.id,organizationId]);
+        if(duplicateEvent.rowCount){
+          await pool.query('insert into sync_receipts (organization_id,device_id,local_sequence,entity_type,entity_id) values ($1,$2,$3,$4,$5) on conflict do nothing',[organizationId,op.deviceId,op.localSequence,op.entity,op.entityId]);
+          await pool.query('COMMIT');
+          results.push({id:op.id,ok:true,deduplicated:true});
+          continue;
+        }
         if (p.type === 'sale') {
           await pool.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [`inventory:${organizationId}:${p.locationId}:${p.productId}`]);
           const stockResult = await pool.query(`

@@ -108,22 +108,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict (id) do nothing`, [p.id,organizationId,p.name,p.phone??null,p.email??null,p.creditLimitMinor??null,p.active,p.createdAt,p.updatedAt]);
       } else if (op.entity === 'sale') {
         const sale = p.sale; const items = Array.isArray(p.items) ? p.items : (p.item ? [p.item] : []);
-        if (!sale || !items.length) throw new Error('invalid_sale_payload');
-        const location = await pool.query('select 1 from locations where id=$1 and organization_id=$2 limit 1', [sale.locationId, organizationId]);
+        if (!sale || !items.length || sale.id!==op.entityId) throw new Error('invalid_sale_payload');
+        if (sale.organizationId && sale.organizationId!==organizationId) throw new Error('operation_identity_mismatch');
+        if (sale.deviceId && sale.deviceId!==op.deviceId) throw new Error('operation_identity_mismatch');
+        if (!['cash','bank','transfer','card','credit'].includes(sale.paymentMethod) || sale.status!=='completed') throw new Error('invalid_sale_state');
+        if (!Number.isSafeInteger(sale.subtotalMinor)||sale.subtotalMinor<0||!Number.isSafeInteger(sale.discountMinor)||sale.discountMinor<0||!Number.isSafeInteger(sale.totalMinor)||sale.totalMinor<0) throw new Error('invalid_sale_totals');
+        if (!(await locationAllowed(pool,role,membershipId,organizationId,sale.locationId))) throw new Error('location_forbidden');
+        const location = await pool.query('select 1 from locations where id=$1 and organization_id=$2 and active=true limit 1', [sale.locationId, organizationId]);
         if (!location.rowCount) throw new Error('ownership_check_failed');
         if (sale.customerId) {
           const customer = await pool.query('select 1 from customers where id=$1 and organization_id=$2 limit 1', [sale.customerId, organizationId]);
           if (!customer.rowCount) throw new Error('customer_ownership_check_failed');
         }
+        let authoritativeSubtotal=0, authoritativeDiscount=0, authoritativeCost=0;
+        const productCosts=new Map<string,number>();
+        for(const item of items){
+          if(!item||typeof item.id!=='string'||item.saleId!==sale.id||typeof item.productId!=='string'||!Number.isFinite(Number(item.quantity))||Number(item.quantity)<=0) throw new Error('invalid_sale_item');
+          if(!Number.isSafeInteger(item.unitPriceMinor)||item.unitPriceMinor<0||!Number.isSafeInteger(item.discountMinor)||item.discountMinor<0) throw new Error('invalid_sale_item');
+          const gross=item.unitPriceMinor*Number(item.quantity);
+          if(!Number.isSafeInteger(gross)||item.discountMinor>gross) throw new Error('invalid_sale_item');
+          const product=await pool.query('select standard_cost_minor from products where id=$1 and organization_id=$2 and active=true limit 1',[item.productId,organizationId]);
+          if(!product.rowCount) throw new Error('product_ownership_check_failed');
+          const unitCost=Number(product.rows[0].standard_cost_minor);
+          if(!Number.isSafeInteger(unitCost)||unitCost<0) throw new Error('invalid_product_cost');
+          authoritativeSubtotal+=gross; authoritativeDiscount+=item.discountMinor; authoritativeCost+=unitCost*Number(item.quantity); productCosts.set(item.productId,unitCost);
+          if(!Number.isSafeInteger(authoritativeSubtotal)||!Number.isSafeInteger(authoritativeDiscount)||!Number.isSafeInteger(authoritativeCost)) throw new Error('sale_total_overflow');
+        }
+        const authoritativeTotal=authoritativeSubtotal-authoritativeDiscount;
+        const authoritativeBelowCost=authoritativeTotal<authoritativeCost;
+        if(sale.subtotalMinor!==authoritativeSubtotal||sale.discountMinor!==authoritativeDiscount||sale.totalMinor!==authoritativeTotal||Boolean(sale.belowCost)!==authoritativeBelowCost) throw new Error('sale_total_mismatch');
+        if(authoritativeBelowCost&&!String(sale.discountReason??'').trim()) throw new Error('below_cost_reason_required');
         await pool.query(`insert into sales (id,organization_id,location_id,customer_id,subtotal_minor,discount_minor,total_minor,payment_method,status,below_cost,discount_reason,occurred_at,device_id,local_sequence,created_at,created_by)
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) on conflict (id) do nothing`, [sale.id,organizationId,sale.locationId,sale.customerId??null,sale.subtotalMinor,sale.discountMinor,sale.totalMinor,sale.paymentMethod,sale.status,sale.belowCost,sale.discountReason??null,sale.occurredAt,sale.deviceId,sale.localSequence,sale.createdAt,user.id]);
         const embeddedEvents = Array.isArray(p.inventoryEvents) ? p.inventoryEvents : (p.inventoryEvent ? [p.inventoryEvent] : []);
         for (let index = 0; index < items.length; index++) {
           const item = items[index];
-          const product = await pool.query('select 1 from products where id=$1 and organization_id=$2 limit 1', [item.productId, organizationId]);
+          const product = await pool.query('select standard_cost_minor from products where id=$1 and organization_id=$2 and active=true limit 1', [item.productId, organizationId]);
           if (!product.rowCount) throw new Error('product_ownership_check_failed');
+          const authoritativeUnitCost=Number(productCosts.get(item.productId));
           await pool.query(`insert into sale_items (id,sale_id,product_id,quantity,unit_price_minor,unit_cost_minor,discount_minor)
-            values ($1,$2,$3,$4,$5,$6,$7) on conflict (id) do nothing`, [item.id,sale.id,item.productId,item.quantity,item.unitPriceMinor,item.unitCostMinor,item.discountMinor]);
+            values ($1,$2,$3,$4,$5,$6,$7) on conflict (id) do nothing`, [item.id,sale.id,item.productId,item.quantity,item.unitPriceMinor,authoritativeUnitCost,item.discountMinor]);
 
           const event = embeddedEvents[index];
           if (!event) continue;

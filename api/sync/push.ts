@@ -150,17 +150,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             values ($1,$2,$3,$4,$5,$6,$7) on conflict (id) do nothing`, [item.id,sale.id,item.productId,item.quantity,item.unitPriceMinor,authoritativeUnitCost,item.discountMinor]);
 
           const event = embeddedEvents[index];
-          if (!event) continue;
+          if (!event || event.referenceId!==sale.id || event.locationId!==sale.locationId || event.productId!==item.productId || event.type!=='sale' || Number(event.quantityDelta)!==-Number(item.quantity) || event.deviceId && event.deviceId!==op.deviceId) throw new Error('invalid_sale_inventory_event');
           const existingEvent = await pool.query('select 1 from inventory_events where id=$1 or reference_id=$2 limit 1', [event.id, sale.id]);
           if (existingEvent.rowCount) continue;
           await pool.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [`inventory:${organizationId}:${sale.locationId}:${item.productId}`]);
           const stockResult = await pool.query(`select coalesce(sum(case when event_type not in ('reservation','reservation_release') then quantity_delta else 0 end),0) as stock from inventory_events where organization_id=$1 and location_id=$2 and product_id=$3`, [organizationId,sale.locationId,item.productId]);
           const stock = Number(stockResult.rows[0]?.stock ?? 0);
-          const required = Math.abs(Number(event.quantityDelta));
+          const required = Number(item.quantity);
           if (!Number.isFinite(required) || required <= 0 || stock < required) throw new Error('insufficient_stock');
           await pool.query(`insert into inventory_events (id,organization_id,location_id,product_id,event_type,quantity_delta,unit_cost_minor,reference_id,occurred_at,device_id,local_sequence,created_at,created_by)
             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) on conflict (id) do nothing`, [event.id,organizationId,event.locationId,event.productId,event.type,event.quantityDelta,event.unitCostMinor??null,event.referenceId??sale.id,event.occurredAt,event.deviceId,event.localSequence,event.createdAt??sale.createdAt,user.id]);
-          await pool.query(`insert into sync_receipts (organization_id,device_id,local_sequence,entity_type,entity_id) values ($1,$2,$3,'inventory_event',$4) on conflict do nothing`, [organizationId,event.deviceId,event.localSequence,event.id]);
+          await change(pool,organizationId,'inventory_event',event.id);
         }
       } else {
         const expense = p;

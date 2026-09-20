@@ -41,6 +41,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await pool.query("insert into organizations (id,name,base_currency,industry) values ($1,$2,'NGN',$3)", [orgId, organizationName, industry]);
       await pool.query("insert into locations (id,organization_id,name,type,code) values ($1,$2,$3,'branch','MAIN')", [locationId, orgId, locationName]);
       await pool.query("insert into memberships (id,organization_id,user_id,role,active) values ($1,$2,$3,'business_owner',true)", [membershipId, orgId, userId]);
+      await pool.query("insert into ledger_accounts (organization_id,code,name,account_class,normal_balance,active) values " +
+        "($1,'1000','Cash','asset','debit',true),($1,'1010','Bank','asset','debit',true),($1,'1100','Accounts Receivable','asset','debit',true)," +
+        "($1,'1200','Inventory','asset','debit',true),($1,'2000','Accounts Payable','liability','credit',true),($1,'3000','Owner Equity','equity','credit',true)," +
+        "($1,'4000','Sales Revenue','revenue','credit',true),($1,'5000','Cost of Goods Sold','expense','debit',true),($1,'6000','Operating Expenses','expense','debit',true) on conflict (organization_id,code) do nothing", [orgId]);
       await pool.query("insert into membership_locations (membership_id,location_id,active) values ($1,$2,true)", [membershipId, locationId]);
       await pool.query("insert into sync_changes (organization_id,entity_type,entity_id,changed_at) values ($1,'location',$2,now())", [orgId, locationId]);
       await pool.query("insert into user_sessions (user_id,token_hash,expires_at,ip_hint,user_agent) values ($1,$2,now()+interval '30 days',$3,$4)", [userId, hashToken(token), req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() ?? null, req.headers['user-agent'] ?? null]);

@@ -60,11 +60,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const role=String(membership[0].role);
   const membershipId=String(membership[0].membership_id);
   for (const op of operations) {
-    if (!op || typeof op !== 'object' || !ALLOWED.has(op.entity) || op.operation !== 'create' || typeof op.id !== 'string' || op.id.length > 100 || typeof op.entityId !== 'string' || op.entityId.length > 100 || typeof op.deviceId !== 'string' || op.deviceId.length > 200 || !Number.isSafeInteger(op.localSequence) || op.localSequence < 0 || (op.organizationId && op.organizationId!==organizationId)) {
+    if (!op || typeof op !== 'object' || !ALLOWED.has(op.entity) || (op.operation !== 'create' && !(op.operation === 'void' && op.entity === 'sale')) || typeof op.id !== 'string' || op.id.length > 100 || typeof op.entityId !== 'string' || op.entityId.length > 100 || typeof op.deviceId !== 'string' || op.deviceId.length > 200 || !Number.isSafeInteger(op.localSequence) || op.localSequence < 0 || (op.organizationId && op.organizationId!==organizationId)) {
       results.push({ id: (op as any)?.id ?? null, ok: false, rejected: true, error: 'invalid_operation' });
       continue;
     }
-    const permission=PERMISSION_BY_ENTITY[String(op.entity)];
+    const permission=op.operation==='void'?'sales.void':PERMISSION_BY_ENTITY[String(op.entity)];
     if(!roleCan(role,permission)){ results.push({id:op.id,ok:false,rejected:true,error:'forbidden'}); continue; }
 
     const pool = transactionPool();
@@ -80,7 +80,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const p: any = op.payload;
       if (!p || typeof p !== 'object') throw new Error('invalid_payload');
 
-      if (op.entity === 'inventory_event') {
+      if(op.operation==='void'){
+        if(op.entity!=='sale'||p.saleId!==op.entityId||!String(p.reason??'').trim()||String(p.reason).length>500) throw new Error('invalid_void_payload');
+        const saleResult=await pool.query('select id,organization_id,location_id,status from sales where id=$1 and organization_id=$2 limit 1 for update',[p.saleId,organizationId]);
+        if(!saleResult.rowCount) throw new Error('sale_not_found');
+        const saleRow=saleResult.rows[0] as any;
+        if(String(saleRow.status)!=='completed') throw new Error('sale_already_voided');
+        if(!(await locationAllowed(pool,role,membershipId,organizationId,String(saleRow.location_id)))) throw new Error('location_forbidden');
+        const itemRows=await pool.query('select id,sale_id,product_id,quantity,unit_cost_minor from sale_items where sale_id=$1 order by id',[p.saleId]);
+        if(!itemRows.rowCount) throw new Error('sale_items_missing');
+        const events=Array.isArray(p.inventoryEvents)?p.inventoryEvents:[];
+        if(events.length!==itemRows.rowCount) throw new Error('invalid_void_payload');
+        const seen=new Set<string>();
+        for(let i=0;i<itemRows.rows.length;i++){
+          const item=itemRows.rows[i] as any, event=events[i];
+          const quantity=Number(item.quantity);
+          if(!event||typeof event.id!=='string'||seen.has(event.id)||event.referenceId!==p.saleId||event.locationId!==saleRow.location_id||event.productId!==item.product_id||event.type!=='sale_void'||Number(event.quantityDelta)!==quantity||(event.deviceId&&event.deviceId!==op.deviceId)) throw new Error('invalid_void_inventory_event');
+          seen.add(event.id);
+          await pool.query('select pg_advisory_xact_lock(hashtextextended($1,0))',['inventory:'+organizationId+':'+saleRow.location_id+':'+item.product_id]);
+          const existingVoid=await pool.query('select id from inventory_events where id=$1 limit 1',[event.id]);
+          if(existingVoid.rowCount) continue;
+          await pool.query("insert into inventory_events (id,organization_id,location_id,product_id,event_type,quantity_delta,unit_cost_minor,reference_id,occurred_at,device_id,local_sequence,created_at,created_by) values ($1,$2,$3,$4,'sale_void',$5,$6,$7,$8,$9,$10,$11,$12)",[event.id,organizationId,saleRow.location_id,item.product_id,quantity,Number(item.unit_cost_minor),p.saleId,event.occurredAt??new Date().toISOString(),op.deviceId,event.localSequence+i+1,event.createdAt??new Date().toISOString(),user.id]);
+          await change(pool,organizationId,'inventory_event',event.id);
+        }
+        await pool.query("update sales set status='voided' where id=$1 and organization_id=$2",[p.saleId,organizationId]);
+        await audit(pool,organizationId,user.id,'sale.voided','sale',p.saleId,{status:'voided'},String(p.reason).trim());
+      } else if (op.entity === 'inventory_event') {
         if (pIdentity(op.payload, op.entityId, organizationId, op.deviceId)) throw new Error(pIdentity(op.payload, op.entityId, organizationId, op.deviceId)!);
         const eventType=(op.payload as any)?.type;
         const delta=(op.payload as any)?.quantityDelta;
@@ -207,8 +232,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await pool.query(`insert into sync_receipts (organization_id,device_id,local_sequence,entity_type,entity_id)
         values ($1,$2,$3,$4,$5) on conflict do nothing`, [organizationId,op.deviceId,op.localSequence,op.entity,op.entityId]);
       await pool.query(`insert into sync_operations (id,organization_id,device_id,entity_type,entity_id,operation_type,payload,created_at,processed_at,state)
-        values ($1,$2,$3,$4,$5,'create',$6::jsonb,$7,now(),'processed')
-        on conflict (id) do update set state='processed',processed_at=now(),error_code=null,error_message=null`, [op.id,organizationId,op.deviceId,op.entity,op.entityId,JSON.stringify(op.payload),op.createdAt]);
+        values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,now(),'processed')
+        on conflict (id) do update set state='processed',processed_at=now(),error_code=null,error_message=null`, [op.id,organizationId,op.deviceId,op.entity,op.entityId,op.operation,JSON.stringify(op.payload),op.createdAt]);
       await pool.query('COMMIT');
       results.push({ id: op.id, ok: true });
     } catch (error) {

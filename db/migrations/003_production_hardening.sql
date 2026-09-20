@@ -138,3 +138,50 @@ end $$;
 drop trigger if exists inventory_scope_guard on inventory_events;
 create trigger inventory_scope_guard before insert or update on inventory_events
 for each row execute function enforce_inventory_scope();
+
+
+-- Seed the server chart for existing organizations; registration also seeds its new organization.
+insert into ledger_accounts (organization_id,code,name,account_class,normal_balance,active)
+select o.id, v.code, v.name, v.account_class, v.normal_balance, true
+from organizations o
+cross join (values
+  ('1000','Cash','asset','debit'),
+  ('1010','Bank','asset','debit'),
+  ('1100','Accounts Receivable','asset','debit'),
+  ('1200','Inventory','asset','debit'),
+  ('2000','Accounts Payable','liability','credit'),
+  ('3000','Owner Equity','equity','credit'),
+  ('4000','Sales Revenue','revenue','credit'),
+  ('5000','Cost of Goods Sold','expense','debit'),
+  ('6000','Operating Expenses','expense','debit')
+) as v(code,name,account_class,normal_balance)
+on conflict (organization_id,code) do nothing;
+
+create or replace function assert_journal_balanced() returns trigger language plpgsql as $$
+declare
+  debit_total bigint;
+  credit_total bigint;
+begin
+  if exists(select 1 from journal_entries je where je.id=coalesce(new.journal_entry_id,old.journal_entry_id) and je.status='posted') then
+    select coalesce(sum(debit_minor),0),coalesce(sum(credit_minor),0)
+    into debit_total,credit_total
+    from journal_lines
+    where journal_entry_id=coalesce(new.journal_entry_id,old.journal_entry_id);
+    if debit_total <> credit_total or (debit_total=0 and credit_total=0) then
+      raise exception 'journal_not_balanced';
+    end if;
+  end if;
+  return coalesce(new,old);
+end $$;
+
+drop trigger if exists journal_lines_balance_guard on journal_lines;
+create constraint trigger journal_lines_balance_guard
+after insert or update or delete on journal_lines
+deferrable initially deferred
+for each row execute function assert_journal_balanced();
+
+drop trigger if exists journal_entries_balance_guard on journal_entries;
+create constraint trigger journal_entries_balance_guard
+after insert or update on journal_entries
+deferrable initially deferred
+for each row execute function assert_journal_balanced();

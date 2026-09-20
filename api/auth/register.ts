@@ -10,6 +10,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!readiness[0] || !readiness[0].membership_locations || !readiness[0].sync_changes || !readiness[0].auth_rate_limits) return json(res, 503, { error: 'server_not_ready' });
     const email = cleanEmail(req.body?.email);
     const password = cleanPassword(req.body?.password);
+    const ipHint = req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || 'unknown';
+    const rateKey = hashToken(`register:${ipHint}`);
+    const rateRows = await db()`select failures,window_started_at,blocked_until from auth_rate_limits where key_hash=${rateKey} limit 1`;
+    const rate = rateRows[0] as any;
+    const nowMs = Date.now();
+    if (rate?.blocked_until && new Date(String(rate.blocked_until)).getTime() > nowMs) {
+      res.setHeader('Retry-After',String(Math.max(1,Math.ceil((new Date(String(rate.blocked_until)).getTime()-nowMs)/1000))));
+      return json(res,429,{error:'too_many_attempts'});
+    }
+    const windowStart = rate?.window_started_at ? new Date(String(rate.window_started_at)).getTime() : 0;
+    const failures = windowStart && windowStart + 60*60_000 > nowMs ? Number(rate?.failures ?? 0) + 1 : 1;
+    if (failures >= 5) {
+      await db()`insert into auth_rate_limits (key_hash,window_started_at,failures,blocked_until,updated_at) values (${rateKey},now(),${failures},now()+interval '1 hour',now()) on conflict (key_hash) do update set window_started_at=now(),failures=${failures},blocked_until=now()+interval '1 hour',updated_at=now()`;
+      res.setHeader('Retry-After','3600');
+      return json(res,429,{error:'too_many_attempts'});
+    }
+    await db()`insert into auth_rate_limits (key_hash,window_started_at,failures,blocked_until,updated_at) values (${rateKey},now(),${failures},null,now()) on conflict (key_hash) do update set failures=${failures},updated_at=now()`;
     const displayName = cleanText(req.body?.displayName, 100);
     const organizationName = cleanText(req.body?.organizationName, 120);
     const industry = cleanText(req.body?.industry ?? 'Retail / General', 80);
@@ -34,7 +51,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } finally {
       await pool.end();
     }
-    setSessionCookie(res, token, 60 * 60 * 24 * 30, isHttps(req));
+    await db()\`delete from auth_rate_limits where key_hash=\${rateKey}\`;\n    setSessionCookie(res, token, 60 * 60 * 24 * 30, isHttps(req));
     return json(res, 201, { user: { id: userId, email, displayName }, organization: { id: orgId, name: organizationName, industry }, location: { id: locationId, name: locationName } });
   } catch (error: any) {
     const msg = String(error?.message ?? error); if (msg.includes('app_users_email_key')) return json(res,409,{error:'email_in_use'}); if (msg.includes('server_not_ready')) return json(res,503,{error:'server_not_ready'}); return json(res,400,{error:'invalid_registration'});

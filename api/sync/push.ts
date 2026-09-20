@@ -31,6 +31,14 @@ async function change(pool:any, organizationId:string, entityType:string, entity
 }
 
 function errorText(error: unknown) { return String((error as any)?.message ?? error); }
+function safeOperationError(error:unknown){
+  const code=String((error as any)?.message??'');
+  const known=['invalid_operation','invalid_payload','operation_identity_mismatch','invalid_inventory_direction','ownership_check_failed','location_forbidden','invalid_product','invalid_customer','invalid_sale_payload','invalid_sale_state','invalid_sale_totals','invalid_sale_item','product_ownership_check_failed','customer_ownership_check_failed','sale_total_mismatch','below_cost_reason_required','invalid_sale_inventory_event','insufficient_stock','invalid_expense_payload','invalid_expense_payment','location_ownership_check_failed'];
+  if(known.includes(code)||code.startsWith('invalid_'))return code;
+  const pgCode=String((error as any)?.code??'');
+  if(pgCode==='40001'||pgCode==='40P01'||pgCode==='53300')return 'temporary_database_conflict';
+  return 'operation_rejected';
+}
 function pIdentity(payload:any, entityId:string, organizationId:string, deviceId:string){ if(!payload||payload.id!==entityId||(payload.organizationId&&payload.organizationId!==organizationId)||(payload.deviceId&&payload.deviceId!==deviceId)) return 'operation_identity_mismatch'; return ''; }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -206,7 +214,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } catch (error) {
       await pool.query('ROLLBACK').catch(() => undefined);
       const message = errorText(error);
-      results.push({ id: op.id, ok: false, conflict: message.includes('insufficient_stock'), error: message });
+      const safeError=safeOperationError(error);
+      const conflict=safeError==='insufficient_stock';
+      const retryable=safeError==='temporary_database_conflict';
+      results.push({ id: op.id, ok: false, conflict, rejected: !conflict&&!retryable, error: safeError });
     } finally {
       await pool.end();
     }

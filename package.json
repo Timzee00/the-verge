@@ -24,7 +24,8 @@
     "vite": "^7.1.4",
     "@vercel/node": "^5.3.24",
     "@types/react": "^19.1.13",
-    "@types/react-dom": "^19.1.9"
+    "@types/react-dom": "^19.1.9",
+    "@types/node": "^24.3.1"
   },
   "engines": {
     "node": "24.x"

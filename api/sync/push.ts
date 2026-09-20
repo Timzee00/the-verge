@@ -139,15 +139,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let authoritativeSubtotal=0, authoritativeDiscount=0, authoritativeCost=0;
         const productCosts=new Map<string,number>();
         for(const item of items){
-          if(!item||typeof item.id!=='string'||item.saleId!==sale.id||typeof item.productId!=='string'||!Number.isFinite(Number(item.quantity))||Number(item.quantity)<=0) throw new Error('invalid_sale_item');
+          if(!item||typeof item.id!=='string'||item.saleId!==sale.id||typeof item.productId!=='string') throw new Error('invalid_sale_item');
+          const quantity=Number(item.quantity);
+          if(!Number.isFinite(quantity)||quantity<=0||quantity>1000000||Number(quantity.toFixed(6))!==quantity) throw new Error('invalid_sale_item');
           if(!Number.isSafeInteger(item.unitPriceMinor)||item.unitPriceMinor<0||!Number.isSafeInteger(item.discountMinor)||item.discountMinor<0) throw new Error('invalid_sale_item');
-          const gross=item.unitPriceMinor*Number(item.quantity);
+          const gross=Math.round(item.unitPriceMinor*quantity);
           if(!Number.isSafeInteger(gross)||item.discountMinor>gross) throw new Error('invalid_sale_item');
           const product=await pool.query('select standard_cost_minor from products where id=$1 and organization_id=$2 and active=true limit 1',[item.productId,organizationId]);
           if(!product.rowCount) throw new Error('product_ownership_check_failed');
           const unitCost=Number(product.rows[0].standard_cost_minor);
           if(!Number.isSafeInteger(unitCost)||unitCost<0) throw new Error('invalid_product_cost');
-          authoritativeSubtotal+=gross; authoritativeDiscount+=item.discountMinor; authoritativeCost+=unitCost*Number(item.quantity); productCosts.set(item.productId,unitCost);
+          authoritativeSubtotal+=gross; authoritativeDiscount+=item.discountMinor; authoritativeCost+=Math.round(unitCost*quantity); productCosts.set(item.productId,unitCost);
           if(!Number.isSafeInteger(authoritativeSubtotal)||!Number.isSafeInteger(authoritativeDiscount)||!Number.isSafeInteger(authoritativeCost)) throw new Error('sale_total_overflow');
         }
         const authoritativeTotal=authoritativeSubtotal-authoritativeDiscount;

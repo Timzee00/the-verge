@@ -17,6 +17,14 @@ function safeServerError(code:unknown,status:number){
     invalid_sale_payload:'The sale data could not be verified.',
     sale_total_mismatch:'The sale totals changed before the server accepted them. Please review the sale.',
     below_cost_reason_required:'A reason is required for a below-cost sale.',
+    server_not_ready:'THE VERGE server setup is not complete yet.',
+    api_unauthorized:'That API credential is invalid or no longer active.',
+    api_scope_forbidden:'That API credential does not have the required scope.',
+    invalid_key_name:'Give the API key a valid name.',
+    invalid_scopes:'Choose valid API scopes.',
+    invalid_expiry:'The API key expiry is invalid or too far in the future.',
+    already_revoked:'That API key has already been revoked.',
+    keyId_required:'Select an API key first.',
   };
   if(messages[value])return messages[value];
   if(value.startsWith('invalid_'))return 'The submitted data could not be accepted. Check the entry and try again.';
@@ -38,5 +46,10 @@ export const api={
   register:(body:{email:string;password:string;displayName:string;organizationName:string;industry:string;locationName:string})=>request<{user:{id:string;email:string;displayName:string};organization:{id:string;name:string;industry:string};location:{id:string;name:string}}>('/api/auth/register',{method:'POST',body:JSON.stringify(body)}),
   logout:()=>request<{ok:boolean}>('/api/auth/logout',{method:'POST'}),
   push:(organizationId:string,operations:unknown[])=>request<{results:Array<{id:string;ok:boolean;conflict?:boolean;error?:string;rejected?:boolean;deduplicated?:boolean}>}>('/api/sync/push',{method:'POST',body:JSON.stringify({organizationId,operations})}),
+  keys:{
+    list:(organizationId:string)=>request<{keys:Array<{id:string;name:string;keyPrefix:string;scopes:string[];createdAt:string;expiresAt?:string|null;revokedAt?:string|null;lastUsedAt?:string|null}>}>(`/api/keys?organizationId=${encodeURIComponent(organizationId)}`),
+    create:(organizationId:string,body:{name:string;scopes:string[];expiresAt?:string|null})=>request<{key:{id:string;name:string;keyPrefix:string;scopes:string[];expiresAt?:string|null;secret:string}}>(`/api/keys?organizationId=${encodeURIComponent(organizationId)}`,{method:'POST',body:JSON.stringify(body)}),
+    revoke:(organizationId:string,keyId:string)=>request<{ok:boolean}>(`/api/keys?organizationId=${encodeURIComponent(organizationId)}&keyId=${encodeURIComponent(keyId)}`,{method:'DELETE'}),
+  },
   pull:(organizationId:string,since:string,page=0,cutoff='')=>request<{products:Product[];locations:Location[];inventoryEvents:InventoryEvent[];sales:Sale[];saleItems:SaleItem[];customers:Customer[];expenses:Expense[];serverTime:string;cutoff:string;hasMore:boolean}>(`/api/sync/pull?organizationId=${encodeURIComponent(organizationId)}&since=${encodeURIComponent(since)}&page=${page}${cutoff?`&cutoff=${encodeURIComponent(cutoff)}`:''}`)
 };

@@ -6,6 +6,7 @@ export interface OfflineSession {
 }
 
 const OFFLINE_SESSION_KEY = 'the-verge-offline-session';
+const OFFLINE_SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function getOfflineSession(): OfflineSession | null {
   try {
@@ -17,12 +18,10 @@ export function getOfflineSession(): OfflineSession | null {
       typeof parsed.organizationId !== 'string' ||
       typeof parsed.organizationName !== 'string'
     ) return null;
-    return {
-      userId: parsed.userId,
-      organizationId: parsed.organizationId,
-      organizationName: parsed.organizationName,
-      savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : new Date(0).toISOString(),
-    };
+    const savedAt = typeof parsed.savedAt === 'string' ? parsed.savedAt : '';
+    const savedMs = Date.parse(savedAt);
+    if (!savedAt || !Number.isFinite(savedMs) || Date.now() - savedMs > OFFLINE_SESSION_MAX_AGE_MS || savedMs > Date.now() + 60_000) return null;
+    return { userId: parsed.userId, organizationId: parsed.organizationId, organizationName: parsed.organizationName, savedAt };
   } catch {
     return null;
   }

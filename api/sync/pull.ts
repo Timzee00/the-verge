@@ -4,6 +4,41 @@ import { json,method,requireUser } from '../_http';
 
 const PAGE_SIZE = 500;
 const PLATFORM_ROLES = new Set(['platform_admin']);
+function numberField(value:unknown,name:string){
+  const n=typeof value==='number'?value:Number(value);
+  if(!Number.isFinite(n)) throw new Error(`invalid_db_number:${name}`);
+  return n;
+}
+function minorField(value:unknown,name:string){
+  const n=numberField(value,name);
+  if(!Number.isSafeInteger(n)||n<0) throw new Error(`invalid_db_minor:${name}`);
+  return n;
+}
+function integerField(value:unknown,name:string){
+  const n=numberField(value,name);
+  if(!Number.isSafeInteger(n)) throw new Error(`invalid_db_integer:${name}`);
+  return n;
+}
+function normalizeProduct(p:any){
+  return {...p,
+    standardCostMinor:minorField(p.standardCostMinor,'standardCostMinor'),
+    retailPriceMinor:minorField(p.retailPriceMinor,'retailPriceMinor'),
+    wholesalePriceMinor:p.wholesalePriceMinor==null?undefined:minorField(p.wholesalePriceMinor,'wholesalePriceMinor'),
+    minimumPriceMinor:p.minimumPriceMinor==null?undefined:minorField(p.minimumPriceMinor,'minimumPriceMinor'),
+    weightValue:p.weightValue==null?undefined:numberField(p.weightValue,'weightValue'),
+    reorderLevel:p.reorderLevel==null?undefined:numberField(p.reorderLevel,'reorderLevel')
+  };
+}
+function normalizeEvent(e:any){
+  return {...e,quantityDelta:numberField(e.quantityDelta,'quantityDelta'),unitCostMinor:e.unitCostMinor==null?undefined:minorField(e.unitCostMinor,'unitCostMinor'),localSequence:integerField(e.localSequence,'localSequence')};
+}
+function normalizeSale(s:any){
+  return {...s,subtotalMinor:minorField(s.subtotalMinor,'subtotalMinor'),discountMinor:minorField(s.discountMinor,'discountMinor'),totalMinor:minorField(s.totalMinor,'totalMinor'),localSequence:integerField(s.localSequence,'localSequence')};
+}
+function normalizeSaleItem(i:any){
+  return {...i,quantity:numberField(i.quantity,'quantity'),unitPriceMinor:minorField(i.unitPriceMinor,'unitPriceMinor'),unitCostMinor:minorField(i.unitCostMinor,'unitCostMinor'),discountMinor:minorField(i.discountMinor,'discountMinor')};
+}
+function normalizeExpense(e:any){ return {...e,amountMinor:minorField(e.amountMinor,'expense.amountMinor')}; }
 
 export default async function handler(req:VercelRequest,res:VercelResponse){
   if(!method(req,res,['GET']))return;
@@ -55,5 +90,5 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
     : await sql`select id,organization_id as "organizationId",location_id as "locationId",amount_minor as "amountMinor",category,description,payment_method as "paymentMethod",occurred_at as "occurredAt",device_id as "deviceId",created_at as "createdAt" from expenses where organization_id=${organizationId} and id in (${inList(ids.expense)}) and (location_id is null or location_id in (select ml.location_id from membership_locations ml where ml.membership_id=${membershipId} and ml.active=true))`):[];
 
   const hasMore=changes.length===PAGE_SIZE;
-  return json(res,200,{products,locations,inventoryEvents,sales,saleItems,customers,expenses,serverTime:new Date().toISOString(),cutoff:stableCutoff,hasMore});
+  return json(res,200,{products:(products as any[]).map(normalizeProduct),locations,inventoryEvents:(inventoryEvents as any[]).map(normalizeEvent),sales:(sales as any[]).map(normalizeSale),saleItems:(saleItems as any[]).map(normalizeSaleItem),customers,expenses:(expenses as any[]).map(normalizeExpense),serverTime:new Date().toISOString(),cutoff:stableCutoff,hasMore});
 }

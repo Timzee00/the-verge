@@ -50,6 +50,8 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
     if(req.method==='POST'){
       const name=cleanName(req.body?.name);
       const scopes=cleanScopes(req.body?.scopes);
+      const activeCount=await sql`select count(*)::int as count from api_credentials where organization_id=${organizationId} and revoked_at is null and (expires_at is null or expires_at>now())`;
+      if(Number(activeCount[0]?.count??0)>=20) return json(res,409,{error:'api_key_limit'});
       const expiresAt=cleanExpiry(req.body?.expiresAt);
       const secret=`vga_live_${newToken()}`;
       const prefix=secret.slice(0,18);

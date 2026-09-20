@@ -33,7 +33,7 @@ async function change(pool:any, organizationId:string, entityType:string, entity
 function errorText(error: unknown) { return String((error as any)?.message ?? error); }
 function safeOperationError(error:unknown){
   const code=String((error as any)?.message??'');
-  const known=['invalid_operation','invalid_payload','operation_identity_mismatch','invalid_inventory_direction','ownership_check_failed','location_forbidden','invalid_product','invalid_customer','invalid_sale_payload','invalid_sale_state','invalid_sale_totals','invalid_sale_item','product_ownership_check_failed','customer_ownership_check_failed','sale_total_mismatch','below_cost_reason_required','invalid_sale_inventory_event','insufficient_stock','invalid_expense_payload','invalid_expense_payment','location_ownership_check_failed','invalid_sale_zero_total','accounting_chart_incomplete','invalid_void_payload','invalid_void_inventory_event','sale_not_found','sale_already_voided','sale_items_missing'];
+  const known=['invalid_operation','invalid_payload','operation_identity_mismatch','invalid_inventory_direction','ownership_check_failed','location_forbidden','invalid_product','invalid_customer','invalid_sale_payload','invalid_sale_state','invalid_sale_totals','invalid_sale_item','product_ownership_check_failed','customer_ownership_check_failed','sale_total_mismatch','below_cost_reason_required','invalid_sale_inventory_event','insufficient_stock','invalid_expense_payload','invalid_expense_payment','location_ownership_check_failed','invalid_sale_zero_total','accounting_chart_incomplete','sale_journal_missing','invalid_void_payload','invalid_void_inventory_event','sale_not_found','sale_already_voided','sale_items_missing'];
   if(known.includes(code)||code.startsWith('invalid_'))return code;
   const pgCode=String((error as any)?.code??'');
   if(pgCode==='40001'||pgCode==='40P01'||pgCode==='53300')return 'temporary_database_conflict';
@@ -103,8 +103,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await pool.query("insert into inventory_events (id,organization_id,location_id,product_id,event_type,quantity_delta,unit_cost_minor,reference_id,occurred_at,device_id,local_sequence,created_at,created_by) values ($1,$2,$3,$4,'sale_void',$5,$6,$7,$8,$9,$10,$11,$12)",[event.id,organizationId,saleRow.location_id,item.product_id,quantity,Number(item.unit_cost_minor),p.saleId,event.occurredAt??new Date().toISOString(),op.deviceId,event.localSequence+i+1,event.createdAt??new Date().toISOString(),user.id]);
           await change(pool,organizationId,'inventory_event',event.id);
         }
+        const originalJournal=await pool.query(
+          "select je.id,je.status,jl.account_id,jl.debit_minor,jl.credit_minor,jl.memo from journal_entries je join journal_lines jl on jl.journal_entry_id=je.id where je.organization_id=$1 and je.reference=$2 order by jl.id",
+          [organizationId,'SALE-'+p.saleId]
+        );
+        if(!originalJournal.rowCount) throw new Error('sale_journal_missing');
+        const voidJournalId=crypto.randomUUID();
+        await pool.query(
+          "insert into journal_entries (id,organization_id,reference,description,occurred_at,source_type,source_id,status,created_at,created_by) values ($1,$2,$3,$4,$5,'sale_void',$6,'posted',$7,$8)",
+          [voidJournalId,organizationId,'VOID-SALE-'+p.saleId,'Void sale '+p.saleId,p.occurredAt??new Date().toISOString(),p.saleId,p.createdAt??new Date().toISOString(),user.id]
+        );
+        for(const line of originalJournal.rows as any[]){
+          await pool.query(
+            "insert into journal_lines (id,journal_entry_id,account_id,debit_minor,credit_minor,memo) values ($1,$2,$3,$4,$5,$6)",
+            [crypto.randomUUID(),voidJournalId,line.account_id,line.credit_minor,line.debit_minor,line.memo??null]
+          );
+        }
+        await pool.query("update journal_entries set status='voided' where id=$1",[originalJournal.rows[0].id]);
         await pool.query("update sales set status='voided' where id=$1 and organization_id=$2",[p.saleId,organizationId]);
-        await audit(pool,organizationId,user.id,'sale.voided','sale',p.saleId,{status:'voided'},String(p.reason).trim());
+        await audit(pool,organizationId,user.id,'sale.voided','sale',p.saleId,{status:'voided',reversalJournalEntryId:voidJournalId},String(p.reason).trim());
       } else if (op.entity === 'inventory_event') {
         if (pIdentity(op.payload, op.entityId, organizationId, op.deviceId)) throw new Error(pIdentity(op.payload, op.entityId, organizationId, op.deviceId)!);
         const eventType=(op.payload as any)?.type;

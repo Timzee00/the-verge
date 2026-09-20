@@ -33,7 +33,7 @@ async function change(pool:any, organizationId:string, entityType:string, entity
 function errorText(error: unknown) { return String((error as any)?.message ?? error); }
 function safeOperationError(error:unknown){
   const code=String((error as any)?.message??'');
-  const known=['invalid_operation','invalid_payload','operation_identity_mismatch','invalid_inventory_direction','ownership_check_failed','location_forbidden','invalid_product','invalid_customer','invalid_sale_payload','invalid_sale_state','invalid_sale_totals','invalid_sale_item','product_ownership_check_failed','customer_ownership_check_failed','sale_total_mismatch','below_cost_reason_required','invalid_sale_inventory_event','insufficient_stock','invalid_expense_payload','invalid_expense_payment','location_ownership_check_failed','invalid_void_payload','invalid_void_inventory_event','sale_not_found','sale_already_voided','sale_items_missing'];
+  const known=['invalid_operation','invalid_payload','operation_identity_mismatch','invalid_inventory_direction','ownership_check_failed','location_forbidden','invalid_product','invalid_customer','invalid_sale_payload','invalid_sale_state','invalid_sale_totals','invalid_sale_item','product_ownership_check_failed','customer_ownership_check_failed','sale_total_mismatch','below_cost_reason_required','invalid_sale_inventory_event','insufficient_stock','invalid_expense_payload','invalid_expense_payment','location_ownership_check_failed','invalid_sale_zero_total','accounting_chart_incomplete','invalid_void_payload','invalid_void_inventory_event','sale_not_found','sale_already_voided','sale_items_missing'];
   if(known.includes(code)||code.startsWith('invalid_'))return code;
   const pgCode=String((error as any)?.code??'');
   if(pgCode==='40001'||pgCode==='40P01'||pgCode==='53300')return 'temporary_database_conflict';
@@ -186,6 +186,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if(!Number.isSafeInteger(authoritativeSubtotal)||!Number.isSafeInteger(authoritativeDiscount)||!Number.isSafeInteger(authoritativeCost)) throw new Error('sale_total_overflow');
         }
         const authoritativeTotal=authoritativeSubtotal-authoritativeDiscount;
+        if(authoritativeTotal<=0) throw new Error('invalid_sale_zero_total');
         const authoritativeBelowCost=authoritativeTotal<authoritativeCost;
         if(sale.subtotalMinor!==authoritativeSubtotal||sale.discountMinor!==authoritativeDiscount||sale.totalMinor!==authoritativeTotal||Boolean(sale.belowCost)!==authoritativeBelowCost) throw new Error('sale_total_mismatch');
         if(authoritativeBelowCost&&!String(sale.discountReason??'').trim()) throw new Error('below_cost_reason_required');
@@ -213,7 +214,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) on conflict (id) do nothing`, [event.id,organizationId,event.locationId,event.productId,event.type,event.quantityDelta,event.unitCostMinor??null,event.referenceId??sale.id,event.occurredAt,event.deviceId,event.localSequence,event.createdAt??sale.createdAt,user.id]);
           await change(pool,organizationId,'inventory_event',event.id);
         }
-        await audit(pool,organizationId,user.id,'sale.created','sale',sale.id,{...sale,subtotalMinor:authoritativeSubtotal,discountMinor:authoritativeDiscount,totalMinor:authoritativeTotal,belowCost:authoritativeBelowCost});
+        const saleJournalId=crypto.randomUUID();
+        const debitCode=sale.paymentMethod==='cash'?'1000':sale.paymentMethod==='credit'?'1100':'1010';
+        const accountRows=await pool.query(
+          "select code,id from ledger_accounts where organization_id=$1 and code in ('1000','1010','1100','1200','4000','5000') and active=true",
+          [organizationId]
+        );
+        const accountIds=new Map(accountRows.rows.map((row:any)=>[String(row.code),String(row.id)]));
+        for(const code of [debitCode,'1200','4000','5000']){
+          if(!accountIds.has(code)) throw new Error('accounting_chart_incomplete');
+        }
+        await pool.query(
+          "insert into journal_entries (id,organization_id,reference,description,occurred_at,source_type,source_id,status,created_at,created_by) values ($1,$2,$3,$4,$5,'sale',$6,'posted',$7,$8)",
+          [saleJournalId,organizationId,'SALE-'+sale.id,'Sale '+sale.id,sale.occurredAt,sale.id,sale.createdAt??new Date().toISOString(),user.id]
+        );
+        const journalLines=[
+          [crypto.randomUUID(),saleJournalId,accountIds.get(debitCode),authoritativeTotal,0],
+          [crypto.randomUUID(),saleJournalId,accountIds.get('4000'),0,authoritativeTotal],
+        ];
+        if(authoritativeCost>0){
+          journalLines.push([crypto.randomUUID(),saleJournalId,accountIds.get('5000'),authoritativeCost,0]);
+          journalLines.push([crypto.randomUUID(),saleJournalId,accountIds.get('1200'),0,authoritativeCost]);
+        }
+        for(const line of journalLines){
+          await pool.query(
+            "insert into journal_lines (id,journal_entry_id,account_id,debit_minor,credit_minor) values ($1,$2,$3,$4,$5)",
+            line
+          );
+        }
+        await audit(pool,organizationId,user.id,'sale.created','sale',sale.id,{...sale,subtotalMinor:authoritativeSubtotal,discountMinor:authoritativeDiscount,totalMinor:authoritativeTotal,belowCost:authoritativeBelowCost,journalEntryId:saleJournalId});
         await change(pool,organizationId,'sale',sale.id);
       } else {
         const expense = p;

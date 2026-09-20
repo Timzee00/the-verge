@@ -91,7 +91,13 @@ export default function App(){
         if(r.ok){
           await localDB.syncOperations.update(op.id,{state:'synced',attempts:op.attempts+1,lastError:undefined,nextAttemptAt:undefined});
           if(op.entity==='inventory_event')await localDB.inventoryEvents.update(op.entityId,{syncState:'synced'});
-          if(op.entity==='sale')await localDB.sales.update(op.entityId,{syncState:'synced'});
+          if(op.entity==='sale'){
+            await localDB.sales.update(op.entityId,{syncState:'synced'});
+            if(op.operation==='void'){
+              const payload=op.payload as {inventoryEvents?:InventoryEvent[]};
+              for(const event of payload.inventoryEvents??[])await localDB.inventoryEvents.update(event.id,{syncState:'synced'});
+            }
+          }
         }else if(r.conflict){
           conflictCount++;
           await localDB.syncOperations.update(op.id,{state:'conflict',attempts:op.attempts+1,lastError:r.error??'Conflict',nextAttemptAt:undefined});
@@ -100,7 +106,13 @@ export default function App(){
         }else if(r.rejected){
           await localDB.syncOperations.update(op.id,{state:'rejected',attempts:op.attempts+1,lastError:r.error??'Rejected',nextAttemptAt:undefined});
           if(op.entity==='inventory_event')await localDB.inventoryEvents.update(op.entityId,{syncState:'rejected'});
-          if(op.entity==='sale')await localDB.sales.update(op.entityId,{syncState:'rejected'});
+          if(op.entity==='sale'){
+            await localDB.sales.update(op.entityId,{status:op.operation==='void'?'completed':'completed',syncState:'rejected'});
+            if(op.operation==='void'){
+              const payload=op.payload as {inventoryEvents?:InventoryEvent[]};
+              for(const event of payload.inventoryEvents??[])await localDB.inventoryEvents.update(event.id,{syncState:'rejected'});
+            }
+          }
         }else{
           const attempts=op.attempts+1;
           await localDB.syncOperations.update(op.id,{attempts,lastError:r.error??'Sync failed',nextAttemptAt:new Date(Date.now()+Math.min(60000,1000*2**Math.min(attempts,6))).toISOString()});

@@ -15,7 +15,7 @@ insert into membership_locations (membership_id, location_id, active)
 select m.id, l.id, true
 from memberships m
 join locations l on l.organization_id = m.organization_id
-where m.active = true and l.active = true
+where m.active = true and l.active = true and m.role in ('business_owner','platform_admin')
 on conflict (membership_id, location_id) do nothing;
 
 create index if not exists inventory_events_org_seq_idx on inventory_events(organization_id, device_id, local_sequence);

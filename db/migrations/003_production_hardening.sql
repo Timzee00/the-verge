@@ -1,4 +1,12 @@
 -- The Verge — production hardening
+
+-- Adjust sync receipt idempotency: the same entity may legitimately receive later operations
+-- (for example, a completed sale followed later by an authorized void).
+alter table sync_receipts drop constraint if exists sync_receipts_device_id_local_sequence_key;
+alter table sync_receipts drop constraint if exists sync_receipts_organization_id_entity_type_entity_id_key;
+create unique index if not exists sync_receipts_org_device_sequence_key on sync_receipts(organization_id,device_id,local_sequence);
+
+
 -- Run after 002_auth_and_sync.sql.
 -- Adds location-scoped memberships, append-only sync sequencing, and auth rate limiting.
 

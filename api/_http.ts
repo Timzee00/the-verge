@@ -3,8 +3,30 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { db } from './_db';
 
 export const json = (res: VercelResponse, status: number, body: unknown) => {
-  res.status(status).setHeader('Content-Type', 'application/json').json(body);
+  res.status(status)
+    .setHeader('Content-Type', 'application/json; charset=utf-8')
+    .setHeader('Cache-Control', 'no-store')
+    .setHeader('X-Content-Type-Options', 'nosniff')
+    .setHeader('Referrer-Policy', 'same-origin')
+    .json(body);
 };
+
+export function requireSameOrigin(req: VercelRequest, res: VercelResponse) {
+  const origin = String(req.headers.origin ?? '').trim();
+  if (!origin) return true;
+  try {
+    const expectedHost = String(req.headers['x-forwarded-host'] ?? req.headers.host ?? '').split(',')[0].trim();
+    const actual = new URL(origin);
+    if (!expectedHost || actual.host !== expectedHost) {
+      json(res, 403, { error: 'origin_forbidden' });
+      return false;
+    }
+    return true;
+  } catch {
+    json(res, 403, { error: 'origin_forbidden' });
+    return false;
+  }
+}
 
 export const method = (req: VercelRequest, res: VercelResponse, allowed: string[]) => {
   if (!allowed.includes(req.method ?? '')) {

@@ -27,6 +27,7 @@ function safeServerError(code:unknown,status:number){
     keyId_required:'Select an API key first.',
     origin_forbidden:'The request origin was not accepted.',
     not_found:'That resource was not found.',
+    api_key_limit:'This workspace has reached its active API credential limit. Revoke an unused credential first.',
   };
   if(messages[value])return messages[value];
   if(value.startsWith('invalid_'))return 'The submitted data could not be accepted. Check the entry and try again.';

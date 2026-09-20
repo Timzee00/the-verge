@@ -254,6 +254,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         await pool.query(`insert into expenses (id,organization_id,location_id,amount_minor,category,description,payment_method,occurred_at,device_id,created_at,created_by)
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) on conflict (id) do nothing`, [expense.id,organizationId,expense.locationId??null,expense.amountMinor,expense.category,expense.description,expense.paymentMethod,expense.occurredAt,expense.deviceId,expense.createdAt,user.id]);
+        const expenseJournalId=crypto.randomUUID();
+        const expenseDebitAccount=await pool.query("select id from ledger_accounts where organization_id=$1 and code='6000' and active=true limit 1",[organizationId]);
+        const expenseCreditCode=expense.paymentMethod==='cash'?'1000':'1010';
+        const expenseCreditAccount=await pool.query("select id from ledger_accounts where organization_id=$1 and code=$2 and active=true limit 1",[organizationId,expenseCreditCode]);
+        if(!expenseDebitAccount.rowCount||!expenseCreditAccount.rowCount) throw new Error('accounting_chart_incomplete');
+        await pool.query(
+          "insert into journal_entries (id,organization_id,reference,description,occurred_at,source_type,source_id,status,created_at,created_by) values ($1,$2,$3,$4,$5,'expense',$6,'posted',$7,$8)",
+          [expenseJournalId,organizationId,'EXPENSE-'+expense.id,expense.description,expense.occurredAt,expense.id,expense.createdAt??new Date().toISOString(),user.id]
+        );
+        await pool.query(
+          "insert into journal_lines (id,journal_entry_id,account_id,debit_minor,credit_minor) values ($1,$2,$3,$4,0),($5,$2,$6,0,$4)",
+          [crypto.randomUUID(),expenseJournalId,expenseDebitAccount.rows[0].id,expense.amountMinor,crypto.randomUUID(),expenseCreditAccount.rows[0].id]
+        );
+
         await audit(pool,organizationId,user.id,'expense.created','expense',expense.id,expense);
         await change(pool,organizationId,'expense',expense.id);
       }

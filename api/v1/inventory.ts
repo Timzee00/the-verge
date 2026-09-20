@@ -20,13 +20,21 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   const barcode=String(req.query.barcode??'').trim().slice(0,80);
   try{
     const sql=db();
+    const locationId=String(req.query.locationId??'').trim();
+    if(locationId){
+      const loc=await sql`select 1 from locations where id=${locationId} and organization_id=${organizationId} and active=true limit 1`;
+      if(!loc.length)return json(res,404,{error:'location_not_found'});
+    }
     const rows=await sql`
       select p.id,p.sku,p.barcode,p.name,p.brand,p.category,p.unit,
              p.weight_value as "weightValue",p.weight_unit as "weightUnit",
              p.standard_cost_minor as "standardCostMinor",p.retail_price_minor as "retailPriceMinor",
              p.wholesale_price_minor as "wholesalePriceMinor",p.minimum_price_minor as "minimumPriceMinor",
              p.reorder_level as "reorderLevel",p.active,
-             p.created_at as "createdAt",p.updated_at as "updatedAt"
+             p.created_at as "createdAt",p.updated_at as "updatedAt",
+             ${locationId
+               ? sql`coalesce((select sum(case when ie.event_type not in ('reservation','reservation_release') then ie.quantity_delta else 0 end) from inventory_events ie where ie.organization_id=p.organization_id and ie.product_id=p.id and ie.location_id=${locationId}),0)`
+               : sql`null`} as "stock"
       from products p
       where p.organization_id=${organizationId}
         and (${search}='' or p.name ilike '%'||${search}||'%' or p.sku ilike '%'||${search}||'%')
@@ -39,7 +47,8 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
       wholesalePriceMinor:p.wholesalePriceMinor==null?null:Number(p.wholesalePriceMinor),
       minimumPriceMinor:p.minimumPriceMinor==null?null:Number(p.minimumPriceMinor),
       weightValue:p.weightValue==null?null:Number(p.weightValue),
-      reorderLevel:p.reorderLevel==null?null:Number(p.reorderLevel)
+      reorderLevel:p.reorderLevel==null?null:Number(p.reorderLevel),
+      stock:p.stock==null?null:Number(p.stock)
     });
     return json(res,200,{data:(rows as any[]).map(normalize),pagination:{page,limit,returned:rows.length,nextPage:rows.length===limit?page+1:null}});
   }catch{

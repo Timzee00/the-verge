@@ -99,6 +99,9 @@ export default function App(){
         if(pulled.locations.length)await localDB.locations.bulkPut(pulled.locations);
         if(pulled.inventoryEvents.length)await localDB.inventoryEvents.bulkPut(pulled.inventoryEvents.map(e=>({...e,syncState:'synced'} as InventoryEvent)));
         if(pulled.sales.length)await localDB.sales.bulkPut(pulled.sales.map((sale:any)=>({...sale,syncState:'synced'})));
+        if(pulled.saleItems?.length)await localDB.saleItems.bulkPut(pulled.saleItems);
+        if(pulled.customers?.length)await localDB.customers.bulkPut(pulled.customers);
+        if(pulled.expenses?.length)await localDB.expenses.bulkPut(pulled.expenses.map(expense=>({...expense,syncState:'synced'})));
         if(!pulled.hasMore)await localDB.meta.put({key:`lastSync:${activeOrgId}`,value:pulled.cutoff});
       });
       hasMore=pulled.hasMore;

@@ -36,3 +36,5 @@ html{width:100%;max-width:100%;overflow-x:hidden}body,#root{width:100%;max-width
   .auth-card h1{font-size:clamp(29px,9vw,42px)}
   .notice-banner{width:100%;max-width:100%}
 }
+
+.api-scope-picker{margin:14px 0 4px}.api-scope-picker button{cursor:pointer}.api-scope-picker .scope-selected{background:#111827;color:#fff;border-color:#111827}.key-secret{margin-top:16px;padding:16px;border:1px solid #cbd5e1;border-radius:14px;background:#f8fafc;display:grid;gap:10px}.key-secret strong,.key-secret small{display:block}.key-secret small{color:#64748b;margin-top:3px;line-height:1.5}.key-secret code{display:block;padding:12px;border-radius:10px;background:#0f172a;color:#e2e8f0;overflow:auto;word-break:break-all;font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.key-list{margin-top:18px}.key-list .list-row{align-items:flex-start}.key-list .secondary{flex:none}.key-list .chip{white-space:nowrap}

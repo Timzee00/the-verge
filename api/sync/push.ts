@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { db, transactionPool } from '../_db';
-import { json, method, requireUser } from '../_http';
+import { json, method, requireSameOrigin, requireUser } from '../_http';
 
 const ALLOWED = new Set(['inventory_event', 'product', 'customer', 'sale', 'expense']);
 const PERMISSION_BY_ENTITY: Record<string,string> = { inventory_event:'inventory.write', product:'inventory.write', customer:'business.write', sale:'sales.write', expense:'finance.write' };
@@ -35,6 +35,7 @@ function pIdentity(payload:any, entityId:string, organizationId:string, deviceId
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!method(req, res, ['POST'])) return;
+  if (!requireSameOrigin(req, res)) return;
   const user = await requireUser(req, res);
   if (!user) return;
 

@@ -41,3 +41,5 @@ const saleProduct = { id:'p', organizationId:'o', sku:'SKU', name:'Item', unit:'
 equal(calculateSale({product:saleProduct,quantity:2,unitPriceMinor:1500,paymentMethod:'cash'}).totalMinor,3000);
 equal(calculateSale({product:saleProduct,quantity:2,unitPriceMinor:1500,discountMinor:1000,paymentMethod:'cash'}).belowCost,false);
 throws(() => calculateSale({product:saleProduct,quantity:2,unitPriceMinor:500,discountMinor:1,paymentMethod:'cash'}));
+equal(calculateSale({product:saleProduct,quantity:0.5,unitPriceMinor:1500,paymentMethod:'cash'}).totalMinor,750);
+throws(() => calculateSale({product:saleProduct,quantity:0.1234567,unitPriceMinor:1500,paymentMethod:'cash'}));

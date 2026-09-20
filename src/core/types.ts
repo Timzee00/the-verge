@@ -35,11 +35,11 @@ export type SyncEntity = 'inventory_event'|'sale'|'purchase'|'customer'|'expense
 export interface SyncOperation { id: ID; organizationId?: ID; deviceId: ID; entity: SyncEntity; entityId: ID; operation: 'create'|'void'; payload: unknown; createdAt: ISODate; attempts: number; state: SyncState; lastError?: string; nextAttemptAt?: ISODate; }
 
 export type PersonalTransactionType = 'income'|'expense'|'transfer';
-export interface PersonalAccount { id: ID; name: string; type: 'cash'|'bank'|'savings'|'other'; openingBalanceMinor: number; active: boolean; currency: CurrencyCode; }
-export interface PersonalTransaction { id: ID; accountId: ID; type: PersonalTransactionType; amountMinor: number; category?: string; description: string; occurredAt: ISODate; createdAt: ISODate; syncState: SyncState; }
-export interface Budget { id: ID; category: string; period: 'weekly'|'monthly'; limitMinor: number; active: boolean; }
-export interface SavingsGoal { id: ID; name: string; targetMinor: number; currentMinor: number; deadline?: ISODate; active: boolean; }
-export interface Debt { id: ID; direction: 'owed_to_me'|'i_owe'; name: string; principalMinor: number; paidMinor: number; dueDate?: ISODate; active: boolean; }
+export interface PersonalAccount { id: ID; userId?: ID; name: string; type: 'cash'|'bank'|'savings'|'other'; openingBalanceMinor: number; active: boolean; currency: CurrencyCode; }
+export interface PersonalTransaction { id: ID; userId?: ID; accountId: ID; type: PersonalTransactionType; amountMinor: number; category?: string; description: string; occurredAt: ISODate; createdAt: ISODate; syncState: SyncState; }
+export interface Budget { id: ID; userId?: ID; category: string; period: 'weekly'|'monthly'; limitMinor: number; active: boolean; }
+export interface SavingsGoal { id: ID; userId?: ID; name: string; targetMinor: number; currentMinor: number; deadline?: ISODate; active: boolean; }
+export interface Debt { id: ID; userId?: ID; direction: 'owed_to_me'|'i_owe'; name: string; principalMinor: number; paidMinor: number; dueDate?: ISODate; active: boolean; }
 
 export type PlanCode = 'free'|'business'|'pro'|'enterprise';
 export type EntitlementCode = 'personal.finance'|'business.core'|'inventory.basic'|'inventory.advanced'|'pos'|'multi_location'|'advanced_accounting'|'api.read'|'api.write'|'webhooks'|'whatsapp'|'ai.basic'|'ai.business_insights'|'industry.modules';

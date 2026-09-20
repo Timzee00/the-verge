@@ -8,12 +8,12 @@ export class FinanceOSDB extends Dexie {
   subscriptions!: Table<Subscription,string>; consents!: Table<ConsentRecord,string>; meta!: Table<LocalMeta,string>;
   constructor(){
     super('the-verge-local');
-    this.version(6).stores({
+    this.version(7).stores({
       organizations:'id, name, active', locations:'id, organizationId, name, type, parentId, active', products:'id, organizationId, sku, barcode, category, active, updatedAt', customers:'id, organizationId, name, phone, active', suppliers:'id, organizationId, name, phone, active', sales:'id, organizationId, locationId, customerId, occurredAt, status, syncState, [organizationId+occurredAt]', saleItems:'id, saleId, productId', expenses:'id, organizationId, locationId, category, occurredAt, syncState',
       inventoryEvents:'id, organizationId, locationId, productId, type, occurredAt, syncState, [locationId+productId], localSequence',
       syncOperations:'id, organizationId, deviceId, entity, entityId, state, createdAt, nextAttemptAt',
-      personalAccounts:'id, type, active', personalTransactions:'id, accountId, type, category, occurredAt, syncState',
-      budgets:'id, category, period, active', savingsGoals:'id, active, deadline', debts:'id, direction, dueDate, active',
+      personalAccounts:'id, userId, type, active', personalTransactions:'id, userId, accountId, type, category, occurredAt, syncState',
+      budgets:'id, userId, category, period, active', savingsGoals:'id, userId, active, deadline', debts:'id, userId, direction, dueDate, active',
       entitlements:'id, subjectId, code, active, startsAt, expiresAt', memberships:'id, organizationId, userId, role, active',
       ledgerAccounts:'id, organizationId, code, class, active', journalEntries:'id, organizationId, occurredAt, sourceType, status, syncState', journalLines:'id, journalEntryId, accountId',
       subscriptions:'id, organizationId, userId, plan, status, currentPeriodEnd', consents:'id, userId, version, decidedAt', meta:'key'

@@ -12,9 +12,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
-          cache: npm
+          node-version: '24'
+          package-manager-cache: false
       - run: npm install --no-audit --no-fund
+        env:
+          NPM_CONFIG_FUND: 'false'
+          NPM_CONFIG_AUDIT: 'false'
       - run: npm run typecheck
       - run: npm run test:domain
       - run: npm run build

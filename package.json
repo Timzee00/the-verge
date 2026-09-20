@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run typecheck && npm run typecheck:api && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b --pretty false",
+    "typecheck": "tsc --noEmit --pretty false",
+    "typecheck:api": "tsc -p tsconfig.api.json --noEmit --pretty false",
     "test:domain": "tsc --module nodenext --target ES2022 --moduleResolution nodenext --outDir .tmp-test src/domain/*.ts src/test/domain.spec.ts && node .tmp-test/test/domain.spec.js",
     "clean:test": "node -e \"require('fs').rmSync('.tmp-test',{recursive:true,force:true})\""
   },
@@ -21,7 +22,10 @@
     "@vitejs/plugin-react": "^4.7.0",
     "typescript": "^5.9.2",
     "vite": "^7.1.4",
-    "@vercel/node": "^5.3.24"
+    "@vercel/node": "^5.3.24",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "@types/node": "^24.3.1"
   },
   "engines": {
     "node": "24.x"

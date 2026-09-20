@@ -51,10 +51,11 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
       const name=cleanName(req.body?.name);
       const scopes=cleanScopes(req.body?.scopes);
       const expiresAt=cleanExpiry(req.body?.expiresAt);
-      const secret=newToken();
-      const prefix=`vga_${secret.slice(0,10)}`;
+      const secret=`vga_live_${newToken()}`;
+      const prefix=secret.slice(0,18);
       const id=crypto.randomUUID();
-      await sql`insert into api_credentials (id,organization_id,created_by,name,key_prefix,secret_hash,scopes,expires_at) values (${id},${organizationId},${user.id},${name},${prefix},${hashToken(secret)},${scopes},${expiresAt})`;
+      const scopeArray=`{${scopes.join(',')}}`;
+      await sql`insert into api_credentials (id,organization_id,created_by,name,key_prefix,secret_hash,scopes,expires_at) values (${id},${organizationId},${user.id},${name},${prefix},${hashToken(secret)},${scopeArray}::text[],${expiresAt})`;
       await sql`insert into audit_events (organization_id,actor_user_id,action,entity_type,entity_id,after_data,reason) values (${organizationId},${user.id},'api_credential.created','api_credential',${id},${JSON.stringify({name,scopes,expiresAt,keyPrefix:prefix})}::jsonb,null)`;
       return json(res,201,{key:{id,name,keyPrefix:prefix,scopes,expiresAt,secret}});
     }

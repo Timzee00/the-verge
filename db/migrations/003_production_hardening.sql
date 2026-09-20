@@ -103,6 +103,15 @@ create table if not exists api_credentials (
 );
 create index if not exists api_credentials_org_idx on api_credentials(organization_id,revoked_at,expires_at);
 
+create table if not exists api_key_rate_limits (
+  api_credential_id uuid primary key references api_credentials(id) on delete cascade,
+  window_started_at timestamptz not null default now(),
+  requests integer not null default 0 check (requests >= 0),
+  updated_at timestamptz not null default now()
+);
+create index if not exists api_key_rate_limits_updated_idx on api_key_rate_limits(updated_at);
+
+
 do $$ begin
   if not exists (select 1 from pg_constraint where conname='sales_total_math') then
     alter table sales add constraint sales_total_math check (total_minor = subtotal_minor - discount_minor);

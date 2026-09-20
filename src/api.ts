@@ -25,6 +25,8 @@ function safeServerError(code:unknown,status:number){
     invalid_expiry:'The API key expiry is invalid or too far in the future.',
     already_revoked:'That API key has already been revoked.',
     keyId_required:'Select an API key first.',
+    origin_forbidden:'The request origin was not accepted.',
+    not_found:'That resource was not found.',
   };
   if(messages[value])return messages[value];
   if(value.startsWith('invalid_'))return 'The submitted data could not be accepted. Check the entry and try again.';

@@ -52,7 +52,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const role=String(membership[0].role);
   const membershipId=String(membership[0].membership_id);
   for (const op of operations) {
-    if (!op || typeof op !== 'object' || !ALLOWED.has(op.entity) || op.operation !== 'create' || typeof op.id !== 'string' || typeof op.entityId !== 'string' || typeof op.deviceId !== 'string' || !Number.isInteger(op.localSequence) || op.localSequence < 0 || (op.organizationId && op.organizationId!==organizationId)) {
+    if (!op || typeof op !== 'object' || !ALLOWED.has(op.entity) || op.operation !== 'create' || typeof op.id !== 'string' || op.id.length > 100 || typeof op.entityId !== 'string' || op.entityId.length > 100 || typeof op.deviceId !== 'string' || op.deviceId.length > 200 || !Number.isSafeInteger(op.localSequence) || op.localSequence < 0 || (op.organizationId && op.organizationId!==organizationId)) {
       results.push({ id: (op as any)?.id ?? null, ok: false, rejected: true, error: 'invalid_operation' });
       continue;
     }
@@ -169,7 +169,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
           const event = embeddedEvents[index];
           if (!event || event.referenceId!==sale.id || event.locationId!==sale.locationId || event.productId!==item.productId || event.type!=='sale' || Number(event.quantityDelta)!==-Number(item.quantity) || event.deviceId && event.deviceId!==op.deviceId) throw new Error('invalid_sale_inventory_event');
-          const existingEvent = await pool.query('select 1 from inventory_events where id=$1 or reference_id=$2 limit 1', [event.id, sale.id]);
+          const existingEvent = await pool.query('select 1 from inventory_events where id=$1 limit 1', [event.id]);
           if (existingEvent.rowCount) continue;
           await pool.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [`inventory:${organizationId}:${sale.locationId}:${item.productId}`]);
           const stockResult = await pool.query(`select coalesce(sum(case when event_type not in ('reservation','reservation_release') then quantity_delta else 0 end),0) as stock from inventory_events where organization_id=$1 and location_id=$2 and product_id=$3`, [organizationId,sale.locationId,item.productId]);

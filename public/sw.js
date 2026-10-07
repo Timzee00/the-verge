@@ -45,6 +45,7 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
   if (!isSameOrigin(url) || isApiRequest(url)) return;
+  if (url.pathname === '/reset-password.html') return;
 
   if (request.mode === 'navigate') {
     event.respondWith(

@@ -14,6 +14,13 @@ The active backend for THE VERGE is **Neon**. Supabase is not part of the active
 
 Only server-side code may read `DATABASE_URL`.
 
+For self-service password recovery in Production also configure:
+- `APP_BASE_URL` — the canonical HTTPS origin, for example `https://app.example.com`
+- `RESEND_API_KEY` — server-only email provider credential
+- `AUTH_EMAIL_FROM` — verified sender identity used for account security emails
+
+The health endpoint reports `mailConfigured`; public onboarding should not be enabled until it is true.
+
 Never commit:
 - database URLs
 - database passwords

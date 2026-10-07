@@ -11,6 +11,8 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   if(!organizationId)return json(res,400,{error:'organizationId_required'});
   const credential=await requireApiCredential(req,res,organizationId,'inventory.read');
   if(!credential)return;
+  const readiness=await db()`select to_regclass('public.inventory_balances') as inventory_balances`;
+  if(!(readiness[0] as any)?.inventory_balances)return json(res,503,{error:'server_not_ready'});
 
   const pageRaw=String(req.query.page??'1'),limitRaw=String(req.query.limit??'50');
   const page=Math.max(1,Math.min(10000,Number.isInteger(Number(pageRaw))?Number(pageRaw):1));
@@ -33,7 +35,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
              p.reorder_level as "reorderLevel",p.active,
              p.created_at as "createdAt",p.updated_at as "updatedAt",
              ${locationId
-               ? sql`coalesce((select sum(case when ie.event_type not in ('reservation','reservation_release') then ie.quantity_delta else 0 end) from inventory_events ie where ie.organization_id=p.organization_id and ie.product_id=p.id and ie.location_id=${locationId}),0)`
+               ? sql`coalesce((select ib.quantity_on_hand from inventory_balances ib where ib.organization_id=p.organization_id and ib.product_id=p.id and ib.location_id=${locationId}),0)`
                : sql`null`} as "stock"
       from products p
       where p.organization_id=${organizationId}

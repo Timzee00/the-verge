@@ -120,13 +120,14 @@ export default function App(){
       }
     }
     const meta=await localDB.meta.get(`lastSync:${activeOrgId}`);
-    const since=meta?.value??'1970-01-01T00:00:00.000Z';
-    let page=0;
+    let cursor=/^\d+$/.test(meta?.value??'')?(meta?.value??'0'):'0';
     let cutoff='';
     let hasMore=true;
+    let pages=0;
     while(hasMore){
-      const pulled=await api.pull(activeOrgId,since,page,cutoff);
+      const pulled=await api.pull(activeOrgId,cursor,cutoff);
       cutoff=pulled.cutoff;
+      cursor=pulled.nextCursor;
       await localDB.transaction('rw',localDB.products,localDB.locations,localDB.inventoryEvents,localDB.sales,localDB.saleItems,localDB.customers,localDB.expenses,localDB.meta,async()=>{
         if(pulled.products.length)await localDB.products.bulkPut(pulled.products);
         if(pulled.locations.length)await localDB.locations.bulkPut(pulled.locations);
@@ -138,8 +139,8 @@ export default function App(){
         if(!pulled.hasMore)await localDB.meta.put({key:`lastSync:${activeOrgId}`,value:pulled.cutoff});
       });
       hasMore=pulled.hasMore;
-      page++;
-      if(page>1000)throw new Error('Sync pagination safety limit reached');
+      pages++;
+      if(pages>1000)throw new Error('Sync pagination safety limit reached');
     }
     await refresh(activeOrgId);
     if(conflictCount)setToast(`${conflictCount} change${conflictCount===1?'':'s'} need review before syncing again.`);

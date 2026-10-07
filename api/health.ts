@@ -14,9 +14,10 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
       to_regclass('public.membership_locations') as membership_locations,
       to_regclass('public.sync_changes') as sync_changes,
       to_regclass('public.auth_rate_limits') as auth_rate_limits,
-      to_regclass('public.api_credentials') as api_credentials`;
+      to_regclass('public.api_credentials') as api_credentials,
+      to_regclass('public.inventory_balances') as inventory_balances`;
     const row=rows[0] as any;
-    const required=['app_users','organizations','memberships','locations','membership_locations','sync_changes','auth_rate_limits','api_credentials'];
+    const required=['app_users','organizations','memberships','locations','membership_locations','sync_changes','auth_rate_limits','api_credentials','inventory_balances'];
     const missing=required.filter(name=>!row?.[name]);
     const ready=missing.length===0;
     return json(res,ready?200:503,{service:'the-verge',status:ready?'ok':'degraded',database:'connected',schemaReady:ready,missing});

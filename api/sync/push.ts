@@ -53,6 +53,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const sql = db();
+  const readiness=await sql`select to_regclass('public.inventory_balances') as inventory_balances`;
+  if(!(readiness[0] as any)?.inventory_balances)return json(res,503,{error:'server_not_ready'});
   const membership = await sql`select m.id as membership_id,m.role,o.status from memberships m join organizations o on o.id=m.organization_id where m.organization_id=${organizationId} and m.user_id=${user.id} and m.active=true limit 1`;
   if (!membership.length || String(membership[0].status)!=='active') return json(res, 403, { error: 'forbidden' });
 
@@ -141,10 +143,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         if (p.type === 'sale') {
           await pool.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [`inventory:${organizationId}:${p.locationId}:${p.productId}`]);
-          const stockResult = await pool.query(`
-            select coalesce(sum(case when event_type not in ('reservation','reservation_release') then quantity_delta else 0 end),0) as stock
-            from inventory_events
-            where organization_id=$1 and location_id=$2 and product_id=$3`, [organizationId, p.locationId, p.productId]);
+          await pool.query('insert into inventory_balances(organization_id,location_id,product_id,quantity_on_hand,updated_at) values($1,$2,$3,0,now()) on conflict(organization_id,location_id,product_id) do nothing',[organizationId,p.locationId,p.productId]);
+          const stockResult = await pool.query('select quantity_on_hand as stock from inventory_balances where organization_id=$1 and location_id=$2 and product_id=$3 for update',[organizationId,p.locationId,p.productId]);
           const stock = Number(stockResult.rows[0]?.stock ?? 0);
           const required = Math.abs(Number(p.quantityDelta));
           if (!Number.isFinite(required) || required <= 0 || stock < required) {
@@ -223,7 +223,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const existingEvent = await pool.query('select 1 from inventory_events where id=$1 limit 1', [event.id]);
           if (existingEvent.rowCount) continue;
           await pool.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [`inventory:${organizationId}:${sale.locationId}:${item.productId}`]);
-          const stockResult = await pool.query(`select coalesce(sum(case when event_type not in ('reservation','reservation_release') then quantity_delta else 0 end),0) as stock from inventory_events where organization_id=$1 and location_id=$2 and product_id=$3`, [organizationId,sale.locationId,item.productId]);
+          await pool.query('insert into inventory_balances(organization_id,location_id,product_id,quantity_on_hand,updated_at) values($1,$2,$3,0,now()) on conflict(organization_id,location_id,product_id) do nothing',[organizationId,sale.locationId,item.productId]);
+          const stockResult = await pool.query('select quantity_on_hand as stock from inventory_balances where organization_id=$1 and location_id=$2 and product_id=$3 for update',[organizationId,sale.locationId,item.productId]);
           const stock = Number(stockResult.rows[0]?.stock ?? 0);
           const required = Number(item.quantity);
           if (!Number.isFinite(required) || required <= 0 || stock < required) throw new Error('insufficient_stock');

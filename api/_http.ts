@@ -73,7 +73,7 @@ export async function requireUser(req: VercelRequest, res: VercelResponse) {
   const sql = db();
   const rows = await sql`
     select u.id, u.email, u.display_name, u.status, u.email_verified_at,
-           s.id as session_id
+           s.id as session_id, s.last_seen_at
     from user_sessions s
     join app_users u on u.id = s.user_id
     where s.token_hash = ${hashToken(token)}
@@ -82,7 +82,10 @@ export async function requireUser(req: VercelRequest, res: VercelResponse) {
     limit 1`;
   const user = rows[0] as any;
   if (!user || user.status !== 'active') { json(res, 401, { error: 'unauthorized' }); return null; }
-  await sql`update user_sessions set last_seen_at = now() where id = ${user.session_id}`;
+  const lastSeenAt=user.last_seen_at?Date.parse(String(user.last_seen_at)):0;
+  if(!lastSeenAt||Date.now()-lastSeenAt>=5*60_000){
+    await sql`update user_sessions set last_seen_at = now() where id = ${user.session_id} and last_seen_at < now()-interval '5 minutes'`;
+  }
   return user;
 }
 

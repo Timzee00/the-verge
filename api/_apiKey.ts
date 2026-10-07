@@ -19,13 +19,15 @@ export async function requireApiCredential(req:VercelRequest,res:VercelResponse,
   if(!key){json(res,401,{error:'api_unauthorized'});return null;}
   const scopes=Array.isArray(key.scopes)?key.scopes.map(String):[];
   if(!scopes.includes(requiredScope)&&!scopes.includes('api.write')){json(res,403,{error:'api_scope_forbidden'});return null;}
-  const now=Date.now();
-  const current=await sql`select window_started_at,requests from api_key_rate_limits where api_credential_id=${key.id} limit 1`;
-  const state=current[0] as any;
-  const windowStart=state?.window_started_at?new Date(String(state.window_started_at)).getTime():0;
-  const requests=windowStart && now-windowStart<60_000 ? Number(state?.requests??0)+1 : 1;
-  if(requests>600){json(res,429,{error:'api_rate_limited'});return null;}
-  await sql`insert into api_key_rate_limits(api_credential_id,window_started_at,requests,updated_at) values(${key.id},now(),${requests},now()) on conflict(api_credential_id) do update set window_started_at=case when api_key_rate_limits.window_started_at+interval '1 minute'<now() then now() else api_key_rate_limits.window_started_at end,requests=case when api_key_rate_limits.window_started_at+interval '1 minute'<now() then 1 else api_key_rate_limits.requests+1 end,updated_at=now()`;
-  await sql`update api_credentials set last_used_at=now() where id=${key.id}`;
+  const rate=await sql`
+    insert into api_key_rate_limits(api_credential_id,window_started_at,requests,updated_at)
+    values(${key.id},date_trunc('minute',now()),1,now())
+    on conflict(api_credential_id) do update set
+      window_started_at=case when api_key_rate_limits.window_started_at<date_trunc('minute',now()) then date_trunc('minute',now()) else api_key_rate_limits.window_started_at end,
+      requests=case when api_key_rate_limits.window_started_at<date_trunc('minute',now()) then 1 else api_key_rate_limits.requests+1 end,
+      updated_at=now()
+    returning requests`;
+  if(Number((rate[0] as any)?.requests??0)>600){json(res,429,{error:'api_rate_limited'});return null;}
+  await sql`update api_credentials set last_used_at=now() where id=${key.id} and (last_used_at is null or last_used_at<now()-interval '5 minutes')`;
   return {id:String(key.id),organizationId:String(key.organizationId),createdBy:key.createdBy?String(key.createdBy):null,scopes};
 }

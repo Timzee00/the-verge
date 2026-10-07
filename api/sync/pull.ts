@@ -44,10 +44,8 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   if(!method(req,res,['GET']))return;
   const user=await requireUser(req,res); if(!user)return;
   const organizationId=String(req.query.organizationId??'');
-  const sinceRaw=String(req.query.since??'0');
+  const cursorRaw=String(req.query.cursor??req.query.since??'0');
   const cutoffRaw=String(req.query.cutoff??'');
-  const pageRaw=String(req.query.page??'0');
-  const page=Number.isInteger(Number(pageRaw))&&Number(pageRaw)>=0?Number(pageRaw):0;
   if(!organizationId)return json(res,400,{error:'organizationId_required'});
   const sql=db();
 
@@ -56,7 +54,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   const role=String(membership[0].role);
   const membershipId=String(membership[0].membership_id);
 
-  const requestedCursor=/^\d+$/.test(sinceRaw)?sinceRaw:'0';
+  const requestedCursor=/^\d+$/.test(cursorRaw)?cursorRaw:'0';
   const cutoffRow=cutoffRaw&&/^\d+$/.test(cutoffRaw)
     ? [{cutoff:cutoffRaw}]
     : await sql`select coalesce(max(change_seq),0) as cutoff from sync_changes where organization_id=${organizationId}`;
@@ -64,7 +62,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
 
   const changes=await sql`select change_seq,entity_type,entity_id from sync_changes
     where organization_id=${organizationId} and change_seq>${requestedCursor} and change_seq<=${stableCutoff}
-    order by change_seq limit ${PAGE_SIZE} offset ${page*PAGE_SIZE}`;
+    order by change_seq limit ${PAGE_SIZE}`;
 
   const ids:Record<string,string[]>={};
   for(const row of changes as any[]){ const kind=String(row.entity_type); (ids[kind]??=[]).push(String(row.entity_id)); }
@@ -89,6 +87,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
     ? await sql`select id,organization_id as "organizationId",location_id as "locationId",amount_minor as "amountMinor",category,description,payment_method as "paymentMethod",occurred_at as "occurredAt",device_id as "deviceId",created_at as "createdAt" from expenses where organization_id=${organizationId} and id in (${inList(ids.expense)})`
     : await sql`select id,organization_id as "organizationId",location_id as "locationId",amount_minor as "amountMinor",category,description,payment_method as "paymentMethod",occurred_at as "occurredAt",device_id as "deviceId",created_at as "createdAt" from expenses where organization_id=${organizationId} and id in (${inList(ids.expense)}) and (location_id is null or location_id in (select ml.location_id from membership_locations ml where ml.membership_id=${membershipId} and ml.active=true))`):[];
 
-  const hasMore=changes.length===PAGE_SIZE;
-  return json(res,200,{products:(products as any[]).map(normalizeProduct),locations,inventoryEvents:(inventoryEvents as any[]).map(normalizeEvent),sales:(sales as any[]).map(normalizeSale),saleItems:(saleItems as any[]).map(normalizeSaleItem),customers,expenses:(expenses as any[]).map(normalizeExpense),serverTime:new Date().toISOString(),cutoff:stableCutoff,hasMore});
+  const nextCursor=changes.length?String((changes[changes.length-1] as any).change_seq):requestedCursor;
+  const hasMore=changes.length===PAGE_SIZE && BigInt(nextCursor)<BigInt(stableCutoff);
+  return json(res,200,{products:(products as any[]).map(normalizeProduct),locations,inventoryEvents:(inventoryEvents as any[]).map(normalizeEvent),sales:(sales as any[]).map(normalizeSale),saleItems:(saleItems as any[]).map(normalizeSaleItem),customers,expenses:(expenses as any[]).map(normalizeExpense),serverTime:new Date().toISOString(),cutoff:stableCutoff,nextCursor,hasMore});
 }

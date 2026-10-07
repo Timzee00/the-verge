@@ -7,7 +7,8 @@ export function emailDeliveryConfigured(){
   return Boolean(process.env.RESEND_API_KEY&&process.env.AUTH_EMAIL_FROM&&baseUrl());
 }
 function escapeHtml(value:string){
-  return value.replace(/[&<>"']/g,ch=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[ch]??ch));
+  const map:Record<string,string>={ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' };
+  return value.replace(/[&<>"']/g,ch=>map[ch]??ch);
 }
 export async function sendPasswordResetEmail(to:string,token:string){
   const apiKey=String(process.env.RESEND_API_KEY??'').trim();

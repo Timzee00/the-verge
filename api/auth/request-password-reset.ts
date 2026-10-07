@@ -6,7 +6,7 @@ import { sendPasswordResetEmail } from '../_email';
 const GENERIC={ok:true,message:'If that account exists, a password reset email will be sent.'};
 
 function clientAddress(req:VercelRequest){
-  return req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim()||'unknown';
+  return req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim()||null;
 }
 
 export default async function handler(req:VercelRequest,res:VercelResponse){
@@ -18,7 +18,8 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
     const readiness=await sql`select to_regclass('public.password_reset_tokens') as password_reset_tokens,to_regclass('public.auth_rate_limits') as auth_rate_limits`;
     if(!(readiness[0] as any)?.password_reset_tokens||!(readiness[0] as any)?.auth_rate_limits)return json(res,503,{error:'server_not_ready'});
 
-    const rateKey=hashToken(`password-reset:${email}:${clientAddress(req)}`);
+    const ipHint=clientAddress(req);
+    const rateKey=hashToken(`password-reset:${email}:${ipHint??'unknown'}`);
     const rate=await sql`
       insert into auth_rate_limits(key_hash,window_started_at,failures,blocked_until,updated_at)
       values(${rateKey},date_trunc('hour',now()),1,null,now())
@@ -38,7 +39,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
 
     const token=newToken();
     await sql`delete from password_reset_tokens where user_id=${user.id} and (consumed_at is not null or expires_at<=now())`;
-    await sql`insert into password_reset_tokens(user_id,token_hash,expires_at,requested_ip) values(${user.id},${hashToken(token)},now()+interval '30 minutes',${clientAddress(req)})`;
+    await sql`insert into password_reset_tokens(user_id,token_hash,expires_at,requested_ip) values(${user.id},${hashToken(token)},now()+interval '30 minutes',${ipHint})`;
     try{
       await sendPasswordResetEmail(String(user.email),token);
     }catch{

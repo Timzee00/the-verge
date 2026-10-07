@@ -6,7 +6,7 @@ import { hashPassword } from '../_password';
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!method(req, res, ['POST'])) return;
   try {
-    const readiness = await db`select to_regclass('public.membership_locations') as membership_locations, to_regclass('public.sync_changes') as sync_changes, to_regclass('public.auth_rate_limits') as auth_rate_limits, to_regclass('public.inventory_balances') as inventory_balances`;
+    const readiness = await db()`select to_regclass('public.membership_locations') as membership_locations, to_regclass('public.sync_changes') as sync_changes, to_regclass('public.auth_rate_limits') as auth_rate_limits, to_regclass('public.inventory_balances') as inventory_balances`;
     if (!readiness[0] || !readiness[0].membership_locations || !readiness[0].sync_changes || !readiness[0].auth_rate_limits || !readiness[0].inventory_balances) return json(res, 503, { error: 'server_not_ready' });
     const email = cleanEmail(req.body?.email);
     const password = cleanPassword(req.body?.password);

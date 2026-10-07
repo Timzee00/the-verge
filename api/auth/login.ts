@@ -1,6 +1,6 @@
 import type { VercelRequest,VercelResponse } from '@vercel/node';
 import { db } from '../_db';
-import { cleanEmail, cleanPassword, hashToken, isHttps, json, method, newToken, setSessionCookie } from '../_http';
+import { cleanEmail, cleanPassword, hashToken, isHttps, json, method, newToken, requireSameOrigin, setSessionCookie } from '../_http';
 import { verifyPassword } from '../_password';
 
 const WINDOW_MINUTES = 15;
@@ -13,6 +13,7 @@ function clientAddress(req: VercelRequest) {
 
 export default async function handler(req:VercelRequest,res:VercelResponse){
   if(!method(req,res,['POST']))return;
+  if(!requireSameOrigin(req,res))return;
   try{
     const email=cleanEmail(req.body?.email);
     const password=cleanPassword(req.body?.password);

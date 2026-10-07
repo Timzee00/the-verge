@@ -18,6 +18,9 @@ export class FinanceOSDB extends Dexie {
       ledgerAccounts:'id, organizationId, code, class, active', journalEntries:'id, organizationId, occurredAt, sourceType, status, syncState', journalLines:'id, journalEntryId, accountId',
       subscriptions:'id, organizationId, userId, plan, status, currentPeriodEnd', consents:'id, userId, version, decidedAt', meta:'key'
     });
+    this.version(8).stores({
+      syncOperations:'id, organizationId, deviceId, localSequence, entity, entityId, state, createdAt, nextAttemptAt'
+    });
   }
 }
 export const localDB=new FinanceOSDB();

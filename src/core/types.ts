@@ -32,7 +32,7 @@ export interface SaleItem { id: ID; saleId: ID; productId: ID; quantity: number;
 export interface Expense { id: ID; organizationId: ID; locationId?: ID; amountMinor: number; category: string; description: string; paymentMethod: 'cash'|'bank'|'transfer'|'card'; occurredAt: ISODate; deviceId: ID; syncState: SyncState; createdAt: ISODate; }
 
 export type SyncEntity = 'inventory_event'|'sale'|'purchase'|'customer'|'expense'|'transfer'|'product'|'personal_transaction'|'payment'|'journal_entry';
-export interface SyncOperation { id: ID; organizationId?: ID; deviceId: ID; entity: SyncEntity; entityId: ID; operation: 'create'|'void'; payload: unknown; createdAt: ISODate; attempts: number; state: SyncState; lastError?: string; nextAttemptAt?: ISODate; }
+export interface SyncOperation { id: ID; organizationId?: ID; deviceId: ID; localSequence: number; entity: SyncEntity; entityId: ID; operation: 'create'|'void'; payload: unknown; createdAt: ISODate; attempts: number; state: SyncState; lastError?: string; nextAttemptAt?: ISODate; }
 
 export type PersonalTransactionType = 'income'|'expense'|'transfer';
 export interface PersonalAccount { id: ID; userId?: ID; name: string; type: 'cash'|'bank'|'savings'|'other'; openingBalanceMinor: number; active: boolean; currency: CurrencyCode; }

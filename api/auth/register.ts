@@ -1,10 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { db, transactionPool } from '../_db';
-import { cleanEmail, cleanText, cleanPassword, isHttps, json, method, newToken, hashToken, setSessionCookie } from '../_http';
+import { cleanEmail, cleanText, cleanPassword, isHttps, json, method, newToken, hashToken, requireSameOrigin, setSessionCookie } from '../_http';
 import { hashPassword } from '../_password';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!method(req, res, ['POST'])) return;
+  if (!requireSameOrigin(req,res)) return;
   try {
     const readiness = await db()`select to_regclass('public.membership_locations') as membership_locations, to_regclass('public.sync_changes') as sync_changes, to_regclass('public.auth_rate_limits') as auth_rate_limits, to_regclass('public.inventory_balances') as inventory_balances`;
     if (!readiness[0] || !readiness[0].membership_locations || !readiness[0].sync_changes || !readiness[0].auth_rate_limits || !readiness[0].inventory_balances) return json(res, 503, { error: 'server_not_ready' });

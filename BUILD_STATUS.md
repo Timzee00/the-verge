@@ -1,102 +1,84 @@
-# THE VERGE — production-candidate status
+# THE VERGE — production hardening status
 
-## Current branch
+## Active recovery branch
 
-- Branch: `offline-foundation-1.1`
-- Pull request: #1 (draft)
-- Backend target: Neon PostgreSQL
-- Hosting target: Vercel
-- Frontend: Vite + React
-- Local data: IndexedDB via Dexie
-- Product identity: **THE VERGE — Powered by Timzee Corp**
+- Branch: `production-hardening-1.2`
+- Based on: `offline-foundation-1.1`
+- Frontend: React + Vite + TypeScript
+- Offline data: Dexie / IndexedDB
+- API: Vercel Functions
+- Database: Neon PostgreSQL
 
-## Implemented in this branch
+## Implemented in the hardening branch
 
-### Product and UX
-- Public marketing site appears before authentication.
-- Responsive workspace shell for smaller screens.
-- Branded notification banners replace raw application errors in the UI.
-- Hardcoded Lagos/Ikeja demo workspace references were removed from the live workspace.
-- Marketing dashboard values are explicitly labeled illustrative.
+### Reliability and scale foundations
+- Deterministic `localSequence` is now required on sync operations.
+- Product creation is synchronized before its initial stock receipt.
+- Pending operations are sent in sequence order and bounded to 100 per push.
+- Pull synchronization uses a stable cutoff and keyset cursor instead of OFFSET paging.
+- Current stock can be read from `inventory_balances` instead of summing the full event history.
+- Inventory history is made append-only by migration; corrections use compensating events.
+- Session activity writes and API-key usage timestamp writes are throttled.
+- API-key rate limiting uses an atomic database upsert rather than read-then-write counting.
 
-### Authentication and session security
-- Server-backed registration, login, session lookup, and logout.
-- HttpOnly SameSite session cookie.
-- Password hashing remains server-side.
-- Login failure rate limiting.
-- Cross-origin browser-write protection for authenticated sync/logout requests.
-- API responses use no-store headers and avoid returning internal database errors.
+### Usable business core
+- Multi-location workspace foundation.
+- Product registration, initial receipt and restocking.
+- Per-location stock visibility.
+- Multi-item sales cart.
+- Cash, bank, transfer, card and credit sale methods.
+- Optional customer linkage.
+- Customer creation and synchronization.
+- Business expense recording and synchronization.
+- Below-cost sale reason enforcement.
+- Sale void/reversal.
+- Automatic accounting foundation for accepted sales, voids and expenses.
 
-### Local data isolation
-- Personal finance records now carry a user namespace.
-- Dexie personal indexes include `userId`.
-- Logout clears the active personal-data view without deleting offline records.
-- Account export filters user-owned personal sections by signed-in user.
+### Account security
+- Server-backed sessions with HttpOnly cookies.
+- Login/register throttling.
+- Self-service password-reset request and one-time reset tokens.
+- Password reset revokes existing sessions.
+- Password reset actions are audited.
+- Production email configuration is exposed as a health readiness signal.
 
-### Sync and multi-location safety
-- Stable server-side sync change sequence with a high-water-mark cutoff.
-- Pagination uses a fixed cutoff so newly arriving changes do not invalidate an active pull.
-- Location-scoped membership foundation.
-- Server rejects writes to locations outside the user's assigned scope.
-- Organization suspension is checked on sync reads/writes.
-- Inventory direction semantics are validated on the server and in database triggers.
-- Sale stock checks are protected by PostgreSQL transaction locks.
-- Sale totals, discounts, cost, and below-cost status are reconstructed/verified server-side.
-- Sale inventory events are bound to their sale items.
-- Expanded sync payload includes sales items, customers, and expenses.
-- Neon BIGINT/NUMERIC values are normalized at the pull API boundary.
+## Database migrations required in order
 
-### Audit and API foundation
-- Sync-created products, customers, expenses, inventory events, and sales are written to the audit trail.
-- Sequenced change-feed records are created for syncable entities.
-- Scoped, expiring, revocable API credential management is present in Settings.
-- API secrets are returned only at creation and stored as hashes.
+1. `001_core.sql`
+2. `002_auth_and_sync.sql`
+3. `003_production_hardening.sql`
+4. `004_scale_foundation.sql`
+5. `005_account_recovery.sql`
 
-### Financial correctness
-- Money remains integer minor-unit based.
-- Sale calculations now support fractional quantities up to six decimal places with deterministic line rounding.
-- Below-cost sales require a reason.
-- Journal balance validation remains part of the domain test suite.
+The new migrations are committed but have **not** been applied to the production Neon database by this branch.
 
-## Verification status
+## External verification blockers observed on 2026-10-07
 
-### Verified from repository/tool inspection
-- The branch contains the above source changes.
-- The current Neon database was queried read-only and **does not yet contain** the new migration-003 tables:
-  - `membership_locations`
-  - `sync_changes`
-  - `auth_rate_limits`
-  - `api_credentials`
+- GitHub Actions jobs do not start because the GitHub account is locked due to a billing issue.
+- Vercel preview builds reached the daily free deployment limit after diagnostic attempts.
+- The connected Vercel credential cannot bypass the project's team-level Deployment Protection, so protected preview browser smoke tests cannot currently be performed.
+- Before the Vercel rate limit was reached, the build reported a TypeScript/lint failure. Several concrete source defects were repaired afterward, but a final clean build is still required and is not claimed here.
 
-### Not yet proven
-- Full Vite/TypeScript production build on the current branch.
-- Full API TypeScript compilation in GitHub Actions.
-- Browser-level offline/PWA smoke testing.
-- Production database migration execution.
-- Live Vercel deployment to a clean production alias.
-- Real device concurrency testing across multiple locations.
+## Release gate
 
-## Current gating issue
+Do not merge this branch to the production branch or apply its migrations to the live database until all are green:
 
-Migration `db/migrations/003_production_hardening.sql` must be applied to the Neon database before the new location-scoping, sync-change feed, auth throttling, and API-credential code can operate.
+1. `npm run verify`.
+2. Preview deployment against an isolated Neon preview branch.
+3. Schema migration verification.
+4. Register → login → reset password → login.
+5. Create product → receive stock → sync → refresh.
+6. Restock existing product.
+7. Multi-item sale with each payment method.
+8. Customer-linked sale.
+9. Business expense → accounting entry.
+10. Below-cost sale approval validation.
+11. Sale void → stock/accounting reversal.
+12. Offline create/sell → refresh offline → reconnect → sync.
+13. Duplicate retry/idempotency.
+14. Two-client final-unit concurrency.
+15. Staff/location unauthorized read/write denial.
+16. Mobile layout and installable PWA smoke test.
+17. Backup/restore and rollback procedure.
 
-The database migration has **not** been applied automatically.
-
-## Merge gate
-
-Do not merge PR #1 into `main` until all of these are green:
-
-1. Frontend typecheck.
-2. API typecheck.
-3. Domain tests.
-4. Full Vite build.
-5. Preview deployment.
-6. Registration/login smoke test.
-7. Cross-location authorization test.
-8. Offline create/sync/reconnect test.
-9. Duplicate operation/idempotency test.
-10. Below-cost sale validation test.
-11. Mobile layout smoke test.
-12. Database migration verification.
-
-A Vercel deployment URL generated for a preview is not the same thing as the final production domain.
+No document or version number is allowed to override this gate.

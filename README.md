@@ -1,16 +1,29 @@
-# The Verge
+# THE VERGE
 ### Powered by Timzee Corp
 
-The Verge is a local-first personal finance and business operating platform.
+THE VERGE is an offline-first business operating system for small and growing businesses. It keeps sales, stock, customers, expenses, accounting, branches and connected channels in one trustworthy workspace while allowing day-to-day work to continue when the internet is unreliable.
 
-It is designed around a trustworthy financial ledger, event-based inventory, offline synchronization, multi-location operations, role/entitlement controls, customer and supplier workflows, API/WhatsApp integrations, and a future AI assistant.
+## What the product is built to do
 
-## Current engineering priorities
+- Run a multi-location business from phone or desktop.
+- Keep an immutable inventory history while exposing fast current stock balances.
+- Record multi-item POS sales, customers, business expenses and sale reversals.
+- Post verified sales and expenses into a double-entry accounting foundation.
+- Work locally first in IndexedDB and synchronize safely with Neon PostgreSQL.
+- Keep organization, role and location authorization enforced on the server.
+- Expose scoped API credentials so websites and future channels use the same business truth.
+- Grow into purchasing, suppliers, transfers, payments, reports, WhatsApp and a controlled AI assistant without creating separate data silos.
 
-1. Correct accounting and inventory primitives
-2. Offline-first transaction capture and deterministic synchronization
-3. Strong identity, organization, role, entitlement and audit boundaries
-4. Production deployment on Vercel with Neon PostgreSQL
-5. Mobile-first, accessible, graphical UX without emoji-based UI
+## Production stack
 
-The production architecture is intentionally being built in layers so external channels such as websites and WhatsApp use the same business core rather than maintaining separate inventories.
+- Frontend: React + TypeScript + Vite
+- Offline/local data: Dexie + IndexedDB
+- API: Vercel Functions
+- Primary database: Neon PostgreSQL
+- Hosting: Vercel
+
+## Engineering rules
+
+Financial amounts use integer minor units. Inventory history is append-only and stock is projected into a current-balance table for fast reads. Client writes carry deterministic device sequence numbers and server sync is idempotent. Sync pulls use cursors rather than deep offsets. Business authorization is enforced server-side by organization, role and location.
+
+See `PRODUCTION_PLAN.md`, `ARCHITECTURE.md`, `SECURITY.md` and `DEPLOYMENT.md` before changing transaction, authorization or synchronization code.

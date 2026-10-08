@@ -46,6 +46,7 @@ Current sequence:
 - `009_saas_billing.sql`: tiered subscriptions, manual bank upgrade requests, approval state and metered usage counters
 - `010_ai_insight_cache.sql`: short-lived grounded AI insight cache keyed to synchronized business changes
 - `011_notifications_email.sql`: email preferences, customer communication consent and asynchronous outbound-message queue
+- `012_brevo_delivery_events.sql`: Brevo transactional delivery event ledger and current message-status projection
 - `009_email_verification.sql`: one-time email verification tokens for public onboarding
 
 Apply migrations in order against the intended Neon environment. Record the exact migration version before enabling the corresponding server code.
@@ -160,3 +161,32 @@ Customer transactional email and marketing consent are stored separately. Do not
 
 Queue processing endpoint: `POST /api/jobs/mail` with `Authorization: Bearer <MAIL_WORKER_SECRET>`.
 Scheduled notification generation: `POST /api/jobs/notifications` with the same secret. Run the notification generator on an appropriate scheduler, then the mail worker can drain remaining retries. The generator is idempotent by date/week and does not call AI by default.
+
+
+## Brevo delivery webhooks
+
+Create a **transactional email** webhook in Brevo with notify URL:
+
+`<APP_BASE_URL>/api/webhooks/brevo`
+
+Track at least these events:
+- sent/request
+- delivered
+- opened / unique opened
+- click
+- deferred
+- soft bounce
+- hard bounce
+- invalid email
+- blocked
+- error
+- spam
+- unsubscribed
+
+Configure a custom webhook header:
+
+`X-Verge-Webhook-Secret: <BREVO_WEBHOOK_SECRET>`
+
+And set the same value in the deployment environment as `BREVO_WEBHOOK_SECRET`.
+
+THE VERGE stores webhook events idempotently. Unsubscribe disables customer marketing email. Spam, hard-bounce, invalid-email and blocked events disable both transactional and marketing email for that customer until the address/preferences are corrected.

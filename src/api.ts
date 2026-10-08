@@ -2,7 +2,6 @@ import type { Customer, Expense, InventoryEvent, Location, Product, Sale, SaleIt
 
 function safeServerError(code:unknown,status:number){
   const value=String(code??'');
-  if(status>=500||value==='internal_error') return 'The Verge could not complete that request right now. Please try again.';
   const messages:Record<string,string>={
     unauthorized:'Your session has expired. Sign in again.',
     forbidden:'You do not have permission to perform that action.',
@@ -28,8 +27,27 @@ function safeServerError(code:unknown,status:number){
     origin_forbidden:'The request origin was not accepted.',
     not_found:'That resource was not found.',
     api_key_limit:'This workspace has reached its active API credential limit. Revoke an unused credential first.',
+    invalid_location_code:'Use 2–20 letters, numbers, hyphens or underscores for the store code.',
+    invalid_location_email:'Enter a valid store email address.',
+    invalid_location_type:'Choose store/branch or warehouse.',
+    duplicate_location_code:'That store code is already used in this business.',
+    duplicate_location_name:'That store name is already used in this business.',
+    location_limit:'This business has reached its current location limit.',
+    invalid_setup_action:'That setup action is not available.',
+    email_verification_required:'Verify your email before creating API credentials.',
+    email_delivery_unavailable:'Verification email is not configured on this deployment yet.',
+    email_delivery_failed:'THE VERGE could not send the verification email right now. Try again shortly.',
+    invalid_verification_token:'That verification link is invalid or has expired.',
+    ai_not_in_plan:'AI Copilot is not included in the current plan. Open Plans & Billing to upgrade.',
+    usage_limit_reached:'This business has used its AI allowance for the current billing period.',
+    ai_provider_not_configured:'THE VERGE AI is not configured on this deployment yet.',
+    ai_provider_failed:'THE VERGE AI provider could not complete the analysis. Your quota was not charged.',
+    question_required:'Enter a business question for the AI Copilot.',
+    product_limit_reached:'This plan has reached its product limit. Upgrade to add more products.',
+    location_limit_reached:'This plan has reached its location limit. Upgrade to add another branch or warehouse.',
   };
   if(messages[value])return messages[value];
+  if(status>=500||value==='internal_error') return 'The Verge could not complete that request right now. Please try again.';
   if(value.startsWith('invalid_'))return 'The submitted data could not be accepted. Check the entry and try again.';
   return status===404?'The requested Verge service was not found.':'The request could not be completed.';
 }
@@ -42,18 +60,44 @@ async function request<T>(path:string, init:RequestInit={}):Promise<T>{
 }
 
 export type SessionOrg={id:string;name:string;base_currency:string;industry?:string;role:string};
-export type SessionPayload={user:{id:string;email:string;displayName?:string};organizations:SessionOrg[];locations:Location[]};
+export type SessionPayload={user:{id:string;email:string;displayName?:string;emailVerified:boolean};organizations:SessionOrg[];locations:Location[];isPlatformAdmin?:boolean};
 export const api={
   me:()=>request<SessionPayload>('/api/auth/me'),
   login:(body:{email:string;password:string})=>request<{user:{id:string;email:string;displayName?:string}}>('/api/auth/login',{method:'POST',body:JSON.stringify(body)}),
   register:(body:{email:string;password:string;displayName:string;organizationName:string;industry:string;locationName:string})=>request<{user:{id:string;email:string;displayName:string};organization:{id:string;name:string;industry:string};location:{id:string;name:string}}>('/api/auth/register',{method:'POST',body:JSON.stringify(body)}),
   requestPasswordReset:(body:{email:string})=>request<{ok:boolean;message:string}>('/api/auth/request-password-reset',{method:'POST',body:JSON.stringify(body)}),
+  requestEmailVerification:()=>request<{ok:boolean;verified:boolean;message:string}>('/api/auth/request-email-verification',{method:'POST',body:'{}'}),
   logout:()=>request<{ok:boolean}>('/api/auth/logout',{method:'POST'}),
   push:(organizationId:string,operations:unknown[])=>request<{results:Array<{id:string;ok:boolean;conflict?:boolean;error?:string;rejected?:boolean;deduplicated?:boolean}>}>('/api/sync/push',{method:'POST',body:JSON.stringify({organizationId,operations})}),
   keys:{
     list:(organizationId:string)=>request<{keys:Array<{id:string;name:string;keyPrefix:string;scopes:string[];createdAt:string;expiresAt?:string|null;revokedAt?:string|null;lastUsedAt?:string|null}>}>(`/api/keys?organizationId=${encodeURIComponent(organizationId)}`),
     create:(organizationId:string,body:{name:string;scopes:string[];expiresAt?:string|null})=>request<{key:{id:string;name:string;keyPrefix:string;scopes:string[];expiresAt?:string|null;secret:string}}>(`/api/keys?organizationId=${encodeURIComponent(organizationId)}`,{method:'POST',body:JSON.stringify(body)}),
     revoke:(organizationId:string,keyId:string)=>request<{ok:boolean}>(`/api/keys?organizationId=${encodeURIComponent(organizationId)}&keyId=${encodeURIComponent(keyId)}`,{method:'DELETE'}),
+  },
+  ai:{
+    info:(organizationId:string)=>request<{tasks:string[];previewTasks:string[];configured:boolean;plan:string;used:number;limit:number;advanced:boolean}>(`/api/ai/assistant?organizationId=${encodeURIComponent(organizationId)}`),
+    ask:(organizationId:string,question:string,locationId?:string)=>request<{answer:string;usage:{used:number;limit:number;plan:string};asOf:string}>('/api/ai/assistant',{method:'POST',body:JSON.stringify({organizationId,question,locationId})})
+  },
+  notifications:{
+    get:(organizationId:string)=>request<{preferences:Array<{eventCode:string;enabled:boolean;digest:string}>}>(`/api/notifications?organizationId=${encodeURIComponent(organizationId)}`),
+    save:(organizationId:string,eventCode:string,enabled:boolean,digest:string)=>request<{ok:boolean}>('/api/notifications',{method:'POST',body:JSON.stringify({organizationId,eventCode,enabled,digest})})
+  },
+  communications:{
+    emailReceipt:(organizationId:string,saleId:string)=>request<{ok:boolean}>('/api/communications/receipt',{method:'POST',body:JSON.stringify({organizationId,saleId})}),
+    history:(organizationId:string)=>request<{messages:Array<{id:string;messageKind:string;templateCode:string;recipient:string;subject?:string;status:string;deliveryStatus?:string;sentAt?:string;deliveredAt?:string;openedAt?:string;clickedAt?:string;bouncedAt?:string;unsubscribedAt?:string;complaintAt?:string;customerName?:string}>}>(`/api/communications?organizationId=${encodeURIComponent(organizationId)}`)
+  },
+  billing:{
+    status:(organizationId:string)=>request<any>(`/api/billing?organizationId=${encodeURIComponent(organizationId)}`),
+    requestUpgrade:(organizationId:string,plan:'starter'|'pro'|'business',months=1)=>request<any>('/api/billing',{method:'POST',body:JSON.stringify({organizationId,plan,months})})
+  },
+  adminBilling:{
+    list:()=>request<{requests:any[]}>('/api/admin/billing'),
+    decide:(requestId:string,decision:'approve'|'reject')=>request<any>('/api/admin/billing',{method:'POST',body:JSON.stringify({requestId,decision})})
+  },
+  business:{
+    updateProfile:(organizationId:string,body:{name:string;industry:string})=>request<{organization:SessionOrg}>('/api/business/setup',{method:'POST',body:JSON.stringify({action:'update_business',organizationId,...body})}),
+    updateLocation:(organizationId:string,body:{locationId:string;name:string;code:string;type:'branch'|'warehouse';address?:string;phone?:string;email?:string;receiptName?:string;receiptFooter?:string})=>request<{location:Location}>('/api/business/setup',{method:'POST',body:JSON.stringify({action:'update_location',organizationId,...body})}),
+    createLocation:(organizationId:string,body:{name:string;code:string;type:'branch'|'warehouse';address?:string})=>request<{location:Location}>('/api/business/setup',{method:'POST',body:JSON.stringify({action:'create_location',organizationId,...body})})
   },
   pull:(organizationId:string,cursor='0',cutoff='')=>request<{products:Product[];locations:Location[];inventoryEvents:InventoryEvent[];sales:Sale[];saleItems:SaleItem[];customers:Customer[];expenses:Expense[];serverTime:string;cutoff:string;nextCursor:string;hasMore:boolean}>(`/api/sync/pull?organizationId=${encodeURIComponent(organizationId)}&cursor=${encodeURIComponent(cursor)}${cutoff?`&cutoff=${encodeURIComponent(cutoff)}`:''}`)
 };

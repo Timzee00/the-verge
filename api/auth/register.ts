@@ -2,13 +2,27 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { db, transactionPool } from '../_db';
 import { cleanEmail, cleanText, cleanPassword, isHttps, json, method, newToken, hashToken, requireSameOrigin, setSessionCookie } from '../_http';
 import { hashPassword } from '../_password';
+import { sendEmailVerificationEmail } from '../_email';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!method(req, res, ['POST'])) return;
   if (!requireSameOrigin(req,res)) return;
   try {
-    const readiness = await db()`select to_regclass('public.membership_locations') as membership_locations, to_regclass('public.sync_changes') as sync_changes, to_regclass('public.auth_rate_limits') as auth_rate_limits, to_regclass('public.inventory_balances') as inventory_balances`;
-    if (!readiness[0] || !readiness[0].membership_locations || !readiness[0].sync_changes || !readiness[0].auth_rate_limits || !readiness[0].inventory_balances) return json(res, 503, { error: 'server_not_ready' });
+    const readiness = await db()`select
+      to_regclass('public.membership_locations') as membership_locations,
+      to_regclass('public.sync_changes') as sync_changes,
+      to_regclass('public.auth_rate_limits') as auth_rate_limits,
+      to_regclass('public.inventory_balances') as inventory_balances,
+      to_regclass('public.password_reset_tokens') as password_reset_tokens,
+      to_regclass('public.email_verification_tokens') as email_verification_tokens,
+      (
+        select count(*)=6
+        from information_schema.columns
+        where table_schema='public' and table_name='locations'
+          and column_name in ('address','phone','email','receipt_name','receipt_footer','setup_completed_at')
+      ) as location_setup`;
+    const ready=readiness[0] as any;
+    if (!ready?.membership_locations || !ready?.sync_changes || !ready?.auth_rate_limits || !ready?.inventory_balances || !ready?.password_reset_tokens || !ready?.email_verification_tokens || !ready?.location_setup) return json(res, 503, { error: 'server_not_ready' });
     const email = cleanEmail(req.body?.email);
     const password = cleanPassword(req.body?.password);
     const ipHint = req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || 'unknown';
@@ -33,7 +47,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const industry = cleanText(req.body?.industry ?? 'Retail / General', 80);
     const locationName = cleanText(req.body?.locationName, 100);
     const passwordHash = await hashPassword(password);
-    const userId = crypto.randomUUID(); const orgId = crypto.randomUUID(); const locationId = crypto.randomUUID(); const membershipId = crypto.randomUUID(); const token = newToken();
+    const userId = crypto.randomUUID(); const orgId = crypto.randomUUID(); const locationId = crypto.randomUUID(); const membershipId = crypto.randomUUID(); const token = newToken(); const verificationToken=newToken();
     const pool = transactionPool();
     try {
       await pool.query('BEGIN');
@@ -49,6 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await pool.query("insert into membership_locations (membership_id,location_id,active) values ($1,$2,true)", [membershipId, locationId]);
       await pool.query("insert into sync_changes (organization_id,entity_type,entity_id,changed_at) values ($1,'location',$2,now())", [orgId, locationId]);
       await pool.query("insert into user_sessions (user_id,token_hash,expires_at,ip_hint,user_agent) values ($1,$2,now()+interval '30 days',$3,$4)", [userId, hashToken(token), req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() ?? null, req.headers['user-agent'] ?? null]);
+      await pool.query("insert into email_verification_tokens(user_id,token_hash,expires_at) values($1,$2,now()+interval '24 hours')",[userId,hashToken(verificationToken)]);
       await pool.query('COMMIT');
     } catch (error) {
       await pool.query('ROLLBACK').catch(() => undefined);
@@ -58,7 +73,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     await db()`delete from auth_rate_limits where key_hash=${rateKey}`;
     setSessionCookie(res, token, 60 * 60 * 24 * 30, isHttps(req));
-    return json(res, 201, { user: { id: userId, email, displayName }, organization: { id: orgId, name: organizationName, industry }, location: { id: locationId, name: locationName } });
+    try{await sendEmailVerificationEmail(email,verificationToken);}catch{console.error('registration_verification_email_failed');}
+    return json(res, 201, { user: { id: userId, email, displayName, emailVerified:false }, organization: { id: orgId, name: organizationName, industry }, location: { id: locationId, organizationId: orgId, name: locationName, type: 'branch', code: 'MAIN', active: true } });
   } catch (error: any) {
     const msg = String(error?.message ?? error); if (msg.includes('app_users_email_key')) return json(res,409,{error:'email_in_use'}); if (msg.includes('server_not_ready')) return json(res,503,{error:'server_not_ready'}); return json(res,400,{error:'invalid_registration'});
   }

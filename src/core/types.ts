@@ -5,7 +5,10 @@ export type SyncState = 'pending' | 'synced' | 'conflict' | 'rejected';
 
 export interface Organization { id: ID; name: string; baseCurrency: CurrencyCode; createdAt: ISODate; active: boolean; }
 export type LocationType = 'region'|'branch'|'warehouse';
-export interface Location { id: ID; organizationId: ID; name: string; type: LocationType; parentId?: ID; active: boolean; }
+export interface Location {
+  id: ID; organizationId: ID; name: string; type: LocationType; parentId?: ID; code?: string; active: boolean;
+  address?: string; phone?: string; email?: string; receiptName?: string; receiptFooter?: string; setupCompletedAt?: ISODate;
+}
 
 export interface Product {
   id: ID; organizationId: ID; sku: string; barcode?: string; name: string; brand?: string; category?: string;
@@ -19,7 +22,18 @@ export interface InventoryEvent {
   id: ID; organizationId: ID; locationId: ID; productId: ID; type: InventoryEventType;
   quantityDelta: number; unitCostMinor?: number; referenceId?: ID; occurredAt: ISODate; deviceId: ID; localSequence: number; syncState: SyncState; createdAt: ISODate;
 }
-export interface StockReceipt { id: ID; organizationId: ID; locationId: ID; productId: ID; supplierId?: ID; quantity: number; unitCostMinor: number; batchNumber?: string; expiryDate?: ISODate; receivedAt: ISODate; deviceId: ID; }
+export interface StockReceipt { id: ID; organizationId: ID; locationId: ID; productId: ID; supplierId?: ID; quantity: number; unitCostMinor: number; batchNumber?: string; manufactureDate?: ISODate; expiryDate?: ISODate; receivedAt: ISODate; deviceId: ID; }
+export interface InventoryLot {
+  id: ID; organizationId: ID; locationId: ID; productId: ID; supplierId?: ID;
+  batchNumber: string; manufactureDate?: ISODate; expiryDate?: ISODate;
+  quantityReceived: number; quantityAvailable: number; unitCostMinor: number;
+  receivedAt: ISODate; status: 'active'|'quarantined'|'recalled'|'expired'|'depleted';
+}
+export interface RegulatedProductProfile {
+  productId: ID; organizationId: ID; productKind: 'general'|'food'|'medicine'|'medical_device';
+  gtin?: string; nafdacRegNo?: string; genericName?: string; dosageForm?: string; strength?: string;
+  prescriptionRequired: boolean; controlled: boolean; storageCondition?: string;
+}
 
 export interface Customer { id: ID; organizationId: ID; name: string; phone?: string; email?: string; creditLimitMinor?: number; active: boolean; createdAt: ISODate; updatedAt: ISODate; }
 export interface Supplier { id: ID; organizationId: ID; name: string; phone?: string; email?: string; active: boolean; createdAt: ISODate; updatedAt: ISODate; }
@@ -41,8 +55,8 @@ export interface Budget { id: ID; userId?: ID; category: string; period: 'weekly
 export interface SavingsGoal { id: ID; userId?: ID; name: string; targetMinor: number; currentMinor: number; deadline?: ISODate; active: boolean; }
 export interface Debt { id: ID; userId?: ID; direction: 'owed_to_me'|'i_owe'; name: string; principalMinor: number; paidMinor: number; dueDate?: ISODate; active: boolean; }
 
-export type PlanCode = 'free'|'business'|'pro'|'enterprise';
-export type EntitlementCode = 'personal.finance'|'business.core'|'inventory.basic'|'inventory.advanced'|'pos'|'multi_location'|'advanced_accounting'|'api.read'|'api.write'|'webhooks'|'whatsapp'|'ai.basic'|'ai.business_insights'|'industry.modules';
+export type PlanCode = 'free'|'starter'|'pro'|'business'|'enterprise';
+export type EntitlementCode = 'personal.finance'|'business.core'|'inventory.basic'|'inventory.advanced'|'pos'|'multi_location'|'advanced_accounting'|'api.read'|'api.write'|'webhooks'|'whatsapp'|'ai.basic'|'ai.business_insights'|'industry.modules'|'branding.remove'|'email.receipts'|'email.automation'|'email.marketing';
 export interface EntitlementGrant { id: ID; subjectId: ID; code: EntitlementCode; source: 'plan'|'promotion'|'manual'|'system'; startsAt: ISODate; expiresAt?: ISODate; active: boolean; reason?: string; }
 
 export type RoleCode = 'platform_owner'|'platform_admin'|'support'|'billing_admin'|'security_admin'|'business_owner'|'manager'|'cashier'|'inventory_staff'|'accountant'|'staff';

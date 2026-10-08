@@ -1,0 +1,13 @@
+import type { VercelRequest,VercelResponse } from '@vercel/node';
+import { db } from './_db'; import { json,method,requireSameOrigin,requireUser } from './_http'; import { billingBankDetails } from './_platform';
+const PRICE:Record<string,number|null>={starter:500000,pro:1000000,business:1500000,enterprise:null};
+export default async function handler(req:VercelRequest,res:VercelResponse){
+ if(!method(req,res,['GET','POST']))return; const user=await requireUser(req,res);if(!user)return;
+ const organizationId=String(req.method==='GET'?req.query.organizationId:req.body?.organizationId??''); if(!organizationId)return json(res,400,{error:'organizationId_required'});
+ const sql=db(); const member=(await sql`select role from memberships where organization_id=${organizationId} and user_id=${user.id} and active=true limit 1`)[0] as any; if(!member)return json(res,403,{error:'forbidden'});
+ if(req.method==='GET'){const sub=await sql`select id,plan_code,status,current_period_start,current_period_end,billing_cycle_months from subscriptions where organization_id=${organizationId} and status in ('trialing','active','grace','past_due') order by created_at desc limit 1`;const pending=await sql`select id,reference_code,requested_plan,amount_minor,currency,billing_cycle_months,status,created_at from billing_upgrade_requests where organization_id=${organizationId} and status='pending' order by created_at desc limit 1`;const branding=await sql`select 1 from entitlements where organization_id=${organizationId} and capability='branding.remove' and effect='allow' and starts_at<=now() and (expires_at is null or expires_at>now()) limit 1`;return json(res,200,{subscription:sub[0]??null,pendingRequest:pending[0]??null,bank:billingBankDetails(),brandingRemoved:Boolean(branding.length)});}
+ if(!requireSameOrigin(req,res))return;if(!['business_owner','platform_admin'].includes(String(member.role)))return json(res,403,{error:'owner_required'});
+ const plan=String(req.body?.plan??'').toLowerCase();if(!(plan in PRICE)||plan==='free')return json(res,400,{error:'invalid_plan'});const months=Math.max(1,Math.min(12,Number(req.body?.months??1)||1));const monthly=PRICE[plan],amount=monthly==null?null:monthly*months;
+ try{const rows=await sql`insert into billing_upgrade_requests(organization_id,requested_by,requested_plan,amount_minor,billing_cycle_months) values(${organizationId},${user.id},${plan},${amount},${months}) returning id,reference_code,requested_plan,amount_minor,currency,billing_cycle_months,status,created_at`;return json(res,201,{request:rows[0],bank:billingBankDetails()});}
+ catch(error:any){if(String(error?.code)==='23505')return json(res,409,{error:'upgrade_already_pending'});return json(res,500,{error:'internal_error'});}
+}

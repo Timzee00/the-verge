@@ -6,6 +6,9 @@ import { assertBalanced, buildSaleJournalLines } from '../domain/accounting.js';
 import { parseMajorToMinor, formatMinor } from '../domain/money.js';
 import { calculateAvailable, calculateStock, validateSaleAgainstSnapshot } from '../domain/inventory.js';
 import { deduplicateOperations, nextRetryAt } from '../domain/sync.js';
+import { calculateSetupProgress, hasUsableStoreStock, isStoreCodeValid } from '../domain/setup.js';
+import { allocateFEFO, lotAvailability, requiresTrackedLot, sortLotsFEFO } from '../domain/retail.js';
+import { hasRecommendedModule, recommendedModules } from '../domain/businessModules.js';
 
 equal(parseMajorToMinor('1,250.50'), 125050);
 throws(() => parseMajorToMinor('10.999'));
@@ -47,3 +50,40 @@ equal(calculateSale({product:saleProduct,quantity:2,unitPriceMinor:1500,discount
 throws(() => calculateSale({product:saleProduct,quantity:2,unitPriceMinor:500,discountMinor:1,paymentMethod:'cash'}));
 equal(calculateSale({product:saleProduct,quantity:0.5,unitPriceMinor:1500,paymentMethod:'cash'}).totalMinor,750);
 throws(() => calculateSale({product:saleProduct,quantity:0.1234567,unitPriceMinor:1500,paymentMethod:'cash'}));
+
+
+equal(isStoreCodeValid('MAIN'), true);
+equal(isStoreCodeValid('ikeja-01'), true);
+equal(isStoreCodeValid('x'), false);
+equal(isStoreCodeValid('bad code'), false);
+
+const setupEvents = [
+  { id:'setup-accepted', organizationId:'o', locationId:'store', productId:'p', type:'purchase', quantityDelta:4, occurredAt:'2026-01-01T00:00:00.000Z', deviceId:'d1', localSequence:1, syncState:'synced', createdAt:'2026-01-01T00:00:00.000Z' },
+  { id:'setup-rejected', organizationId:'o', locationId:'other', productId:'p', type:'purchase', quantityDelta:8, occurredAt:'2026-01-01T00:01:00.000Z', deviceId:'d1', localSequence:2, syncState:'rejected', createdAt:'2026-01-01T00:01:00.000Z' },
+] as any;
+equal(hasUsableStoreStock(setupEvents, 'store'), true);
+equal(hasUsableStoreStock(setupEvents, 'other'), false);
+equal(calculateSetupProgress({businessReady:true,storeConfigured:true,productCount:2,hasOpeningStock:true,saleCount:0}),4);
+equal(calculateSetupProgress({businessReady:true,storeConfigured:true,productCount:2,hasOpeningStock:true,saleCount:1}),5);
+
+const lotBase={organizationId:'o',locationId:'l',productId:'p',quantityReceived:10,unitCostMinor:100,receivedAt:'2026-01-01T00:00:00.000Z',status:'active'} as const;
+const lots:any[]=[
+  {...lotBase,id:'later',batchNumber:'B2',expiryDate:'2027-06-01',quantityAvailable:5},
+  {...lotBase,id:'first',batchNumber:'B1',expiryDate:'2026-12-01',quantityAvailable:3},
+  {...lotBase,id:'expired',batchNumber:'B0',expiryDate:'2026-01-01',quantityAvailable:9},
+  {...lotBase,id:'recalled',batchNumber:'BR',expiryDate:'2027-01-01',quantityAvailable:9,status:'recalled'},
+];
+equal(lotAvailability(lots[2],new Date('2026-10-08T00:00:00Z')),'expired');
+deepEqual(sortLotsFEFO(lots,new Date('2026-10-08T00:00:00Z')).map(x=>x.id),['first','later']);
+deepEqual(allocateFEFO(lots,6,new Date('2026-10-08T00:00:00Z')).allocations,[{lotId:'first',batchNumber:'B1',quantity:3},{lotId:'later',batchNumber:'B2',quantity:3}]);
+equal(allocateFEFO(lots,20,new Date('2026-10-08T00:00:00Z')).fulfilled,false);
+equal(requiresTrackedLot({trackBatch:false,trackExpiry:false,productKind:'medicine'}),true);
+
+const pharmacyModules=recommendedModules('Pharmacy');
+equal(pharmacyModules.includes('pos'),true);
+equal(pharmacyModules.includes('batch_expiry'),true);
+equal(pharmacyModules.includes('prescriptions'),true);
+equal(pharmacyModules.includes('restaurant_tables'),false);
+equal(hasRecommendedModule('Restaurant / Food','kitchen_display'),true);
+equal(hasRecommendedModule('Fashion','variants'),true);
+equal(hasRecommendedModule('Services','appointments'),true);

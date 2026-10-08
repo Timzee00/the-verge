@@ -20,6 +20,8 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
       to_regclass('public.billing_upgrade_requests') as billing_upgrade_requests,
       to_regclass('public.organization_usage_monthly') as organization_usage_monthly,
       to_regclass('public.ai_insights') as ai_insights,
+      to_regclass('public.outbound_messages') as outbound_messages,
+      to_regclass('public.notification_preferences') as notification_preferences,
       to_regclass('public.email_verification_tokens') as email_verification_tokens,
       (
         select count(*)=6
@@ -32,7 +34,9 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
     const missing=required.filter(name=>!row?.[name]);
     const ready=missing.length===0;
     const mailConfigured=Boolean(process.env.RESEND_API_KEY&&process.env.AUTH_EMAIL_FROM&&process.env.APP_BASE_URL);
-    return json(res,ready?200:503,{service:'the-verge',status:ready?'ok':'degraded',database:'connected',schemaReady:ready,mailConfigured,missing});
+    const businessMailConfigured=Boolean(process.env.RESEND_API_KEY&&process.env.BUSINESS_EMAIL_FROM);
+    const notificationReady=Boolean(row.outbound_messages&&row.notification_preferences);
+    return json(res,ready?200:503,{service:'the-verge',status:ready?'ok':'degraded',database:'connected',schemaReady:ready,mailConfigured,businessMailConfigured,notificationReady,missing});
   }catch{
     return json(res,503,{service:'the-verge',status:'degraded',database:'unavailable',schemaReady:false});
   }

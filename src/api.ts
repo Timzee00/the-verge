@@ -83,7 +83,8 @@ export const api={
     save:(organizationId:string,eventCode:string,enabled:boolean,digest:string)=>request<{ok:boolean}>('/api/notifications',{method:'POST',body:JSON.stringify({organizationId,eventCode,enabled,digest})})
   },
   communications:{
-    emailReceipt:(organizationId:string,saleId:string)=>request<{ok:boolean}>('/api/communications/receipt',{method:'POST',body:JSON.stringify({organizationId,saleId})})
+    emailReceipt:(organizationId:string,saleId:string)=>request<{ok:boolean}>('/api/communications/receipt',{method:'POST',body:JSON.stringify({organizationId,saleId})}),
+    history:(organizationId:string)=>request<{messages:Array<{id:string;messageKind:string;templateCode:string;recipient:string;subject?:string;status:string;deliveryStatus?:string;sentAt?:string;deliveredAt?:string;openedAt?:string;clickedAt?:string;bouncedAt?:string;unsubscribedAt?:string;complaintAt?:string;customerName?:string}>}>(`/api/communications?organizationId=${encodeURIComponent(organizationId)}`)
   },
   billing:{
     status:(organizationId:string)=>request<any>(`/api/billing?organizationId=${encodeURIComponent(organizationId)}`),

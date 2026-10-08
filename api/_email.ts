@@ -1,14 +1,21 @@
-const ENDPOINT='https://api.resend.com/emails';
+const ENDPOINT='https://api.brevo.com/v3/smtp/email';
 
 function baseUrl(){return String(process.env.APP_BASE_URL??'').trim().replace(/\/$/,'');}
-export function emailDeliveryConfigured(){return Boolean(process.env.RESEND_API_KEY&&process.env.AUTH_EMAIL_FROM&&baseUrl());}
-export function businessEmailConfigured(){return Boolean(process.env.RESEND_API_KEY&&process.env.BUSINESS_EMAIL_FROM);}
+export function emailDeliveryConfigured(){return Boolean(process.env.BREVO_API_KEY&&process.env.AUTH_EMAIL_FROM&&baseUrl());}
+export function businessEmailConfigured(){return Boolean(process.env.BREVO_API_KEY&&process.env.BUSINESS_EMAIL_FROM);}
 function escapeHtml(value:string){const map:Record<string,string>={ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' };return value.replace(/[&<>"']/g,ch=>map[ch]??ch);}
 async function sendRawEmail(input:{from:string;to:string;subject:string;text:string;html?:string;replyTo?:string}){
- const apiKey=String(process.env.RESEND_API_KEY??'').trim();if(!apiKey)return null;
- const response=await fetch(ENDPOINT,{method:'POST',headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({from:input.from,to:[input.to],subject:input.subject,text:input.text,html:input.html,reply_to:input.replyTo})});
- if(!response.ok)throw new Error(`email_provider_${response.status}`);
- const data:any=await response.json().catch(()=>({}));return String(data?.id??'')||null;
+ const apiKey=String(process.env.BREVO_API_KEY??'').trim();if(!apiKey)return null;
+ const response=await fetch(ENDPOINT,{method:'POST',headers:{'api-key':apiKey,'accept':'application/json','Content-Type':'application/json'},body:JSON.stringify({
+  sender:{email:input.from,name:String(process.env.BREVO_SENDER_NAME??'THE VERGE by Timzee Corp')},
+  to:[{email:input.to}],
+  subject:input.subject,
+  ...(input.html?{htmlContent:input.html}:{textContent:input.text}),
+  ...(input.replyTo?{replyTo:{email:input.replyTo}}:{}),
+  tags:['the-verge','transactional']
+})});
+ if(!response.ok)throw new Error(`brevo_email_${response.status}`);
+ const data:any=await response.json().catch(()=>({}));return String(data?.messageId??'')||null;
 }
 export async function sendPasswordResetEmail(to:string,token:string){
  const from=String(process.env.AUTH_EMAIL_FROM??'').trim(),origin=baseUrl();if(!from||!origin)return false;

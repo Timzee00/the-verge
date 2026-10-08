@@ -26,6 +26,7 @@ create table if not exists outbound_messages (
   recipient text not null,
   subject text,
   payload jsonb not null default '{}'::jsonb,
+  dedupe_key text,
   status text not null default 'queued' check (status in ('queued','sending','sent','failed','cancelled')),
   attempts integer not null default 0 check (attempts >= 0),
   next_attempt_at timestamptz not null default now(),
@@ -34,6 +35,7 @@ create table if not exists outbound_messages (
   created_at timestamptz not null default now(),
   sent_at timestamptz
 );
+create unique index if not exists outbound_messages_dedupe_idx on outbound_messages(organization_id,dedupe_key) where dedupe_key is not null;
 create index if not exists outbound_messages_queue_idx
   on outbound_messages(status,next_attempt_at,created_at)
   where status in ('queued','failed');

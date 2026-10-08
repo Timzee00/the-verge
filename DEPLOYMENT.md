@@ -45,6 +45,7 @@ Current sequence:
 - `008_business_modules.sql`: capability-based presets for retail, supermarket, pharmacy, clinic, restaurant, fashion, printing, real estate, services and other business types
 - `009_saas_billing.sql`: tiered subscriptions, manual bank upgrade requests, approval state and metered usage counters
 - `010_ai_insight_cache.sql`: short-lived grounded AI insight cache keyed to synchronized business changes
+- `011_notifications_email.sql`: email preferences, customer communication consent and asynchronous outbound-message queue
 - `009_email_verification.sql`: one-time email verification tokens for public onboarding
 
 Apply migrations in order against the intended Neon environment. Record the exact migration version before enabling the corresponding server code.
@@ -144,3 +145,17 @@ Groq or another OpenAI-compatible gateway can be used by changing `AI_BASE_URL` 
 The current Copilot is read-only. It analyzes server-authorized sales, inventory, expenses and branch data and does not directly mutate products, stock, prices, accounting or customer records. Owner briefings are cached against the latest synchronized change sequence to reduce repeated provider cost.
 
 Billing configuration also requires `PLATFORM_ADMIN_EMAILS`, `BILLING_BANK_NAME`, `BILLING_ACCOUNT_NAME`, and `BILLING_ACCOUNT_NUMBER`.
+
+
+## Business email and notifications
+
+Configure:
+- `RESEND_API_KEY`
+- `BUSINESS_EMAIL_FROM` for receipts, owner summaries and operational mail
+- `AUTH_EMAIL_FROM` for account/security email
+- `MAIL_WORKER_SECRET` (or schedule endpoints behind an equivalent secret)
+
+Customer transactional email and marketing consent are stored separately. Do not use receipt/transactional consent for campaigns.
+
+Queue processing endpoint: `POST /api/jobs/mail` with `Authorization: Bearer <MAIL_WORKER_SECRET>`.
+Scheduled notification generation: `POST /api/jobs/notifications` with the same secret. Run the notification generator on an appropriate scheduler, then the mail worker can drain remaining retries. The generator is idempotent by date/week and does not call AI by default.

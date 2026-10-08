@@ -43,6 +43,8 @@ Current sequence:
 - `006_store_setup.sql`: store contact/receipt configuration, setup completion state, and unique store codes
 - `007_retail_pharmacy_foundation.sql`: medicine/regulated product metadata plus batch, expiry, FEFO, quarantine and recall-ready lot storage
 - `008_business_modules.sql`: capability-based presets for retail, supermarket, pharmacy, clinic, restaurant, fashion, printing, real estate, services and other business types
+- `009_saas_billing.sql`: tiered subscriptions, manual bank upgrade requests, approval state and metered usage counters
+- `010_ai_insight_cache.sql`: short-lived grounded AI insight cache keyed to synchronized business changes
 - `009_email_verification.sql`: one-time email verification tokens for public onboarding
 
 Apply migrations in order against the intended Neon environment. Record the exact migration version before enabling the corresponding server code.
@@ -127,3 +129,18 @@ Do not advertise THE VERGE as pharmacy-grade until lot-level receiving and lot-l
 THE VERGE uses a universal core (POS, inventory, customers, suppliers, purchasing, expenses, accounting, reports, staff, multi-location, offline sync, receipts, audit, exports and notifications) plus vertical modules.
 
 Changing a business type refreshes only preset modules. Explicit manual module choices are retained. This prevents restaurant, pharmacy, fashion, service and other workflows from being forced into one overloaded interface.
+
+
+## AI Copilot configuration
+
+The AI layer uses an OpenAI-compatible provider. Configure:
+- `AI_API_KEY`
+- `AI_MODEL`
+- `AI_BASE_URL` (optional; defaults to OpenRouter's OpenAI-compatible base URL)
+- `APP_BASE_URL`
+
+Groq or another OpenAI-compatible gateway can be used by changing `AI_BASE_URL` and `AI_MODEL`. Never expose the AI key to the browser.
+
+The current Copilot is read-only. It analyzes server-authorized sales, inventory, expenses and branch data and does not directly mutate products, stock, prices, accounting or customer records. Owner briefings are cached against the latest synchronized change sequence to reduce repeated provider cost.
+
+Billing configuration also requires `PLATFORM_ADMIN_EMAILS`, `BILLING_BANK_NAME`, `BILLING_ACCOUNT_NAME`, and `BILLING_ACCOUNT_NUMBER`.

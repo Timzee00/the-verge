@@ -43,11 +43,11 @@ Current sequence:
 - `006_store_setup.sql`: store contact/receipt configuration, setup completion state, and unique store codes
 - `007_retail_pharmacy_foundation.sql`: medicine/regulated product metadata plus batch, expiry, FEFO, quarantine and recall-ready lot storage
 - `008_business_modules.sql`: capability-based presets for retail, supermarket, pharmacy, clinic, restaurant, fashion, printing, real estate, services and other business types
-- `008_email_verification.sql`: one-time email verification tokens for public onboarding
+- `009_email_verification.sql`: one-time email verification tokens for public onboarding
 
 Apply migrations in order against the intended Neon environment. Record the exact migration version before enabling the corresponding server code.
 
-Migrations `004`–`008` are additive and must be applied **before** deploying application code that requires their tables or columns. For `006_store_setup.sql`, verify that legacy blank/duplicate store codes were normalized and that the `locations_org_code_unique` index exists before enabling public onboarding. Verify `008_email_verification.sql` before opening self-service registration, because registration now issues a one-time verification token.
+Migrations `004`–`009` are additive and must be applied **before** deploying application code that requires their tables or columns. For `006_store_setup.sql`, verify that legacy blank/duplicate store codes were normalized and that the `locations_org_code_unique` index exists before enabling public onboarding. Verify `009_email_verification.sql` before opening self-service registration, because registration now issues a one-time verification token.
 
 ## Preview release process
 

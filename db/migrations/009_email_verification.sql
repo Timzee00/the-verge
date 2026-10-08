@@ -1,5 +1,5 @@
 -- THE VERGE — email verification
--- Run after 007_retail_pharmacy_foundation.sql.
+-- Run after 008_business_modules.sql.
 
 create table if not exists email_verification_tokens (
   id uuid primary key default gen_random_uuid(),

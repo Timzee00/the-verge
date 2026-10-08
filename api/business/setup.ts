@@ -85,9 +85,11 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
     const ready=await sql`
       select
         to_regclass('public.membership_locations') as membership_locations,
-        exists(
-          select 1 from information_schema.columns
-          where table_schema='public' and table_name='locations' and column_name='setup_completed_at'
+        (
+          select count(*)=6
+          from information_schema.columns
+          where table_schema='public' and table_name='locations'
+            and column_name in ('address','phone','email','receipt_name','receipt_footer','setup_completed_at')
         ) as store_setup_ready`;
     if(!(ready[0] as any)?.membership_locations||!(ready[0] as any)?.store_setup_ready)return json(res,503,{error:'server_not_ready'});
 
@@ -100,16 +102,25 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
       if(!OWNER_ROLES.has(role))return json(res,403,{error:'forbidden'});
       const name=cleanText(req.body?.name,120);
       const industry=cleanText(req.body?.industry,80);
-      const rows=await sql`
-        update organizations
-        set name=${name},industry=${industry}
-        where id=${organizationId} and status='active'
-        returning id,name,base_currency,industry`;
-      if(!rows.length)return json(res,404,{error:'not_found'});
-      await sql`
-        insert into audit_events(organization_id,actor_user_id,action,entity_type,entity_id,after_data)
-        values(${organizationId},${user.id},'business.profile_updated','organization',${organizationId},${JSON.stringify({name,industry})}::jsonb)`;
-      return json(res,200,{organization:{id:rows[0].id,name:rows[0].name,base_currency:rows[0].base_currency,industry:rows[0].industry,role}});
+      const pool=transactionPool();
+      try{
+        await pool.query('BEGIN');
+        const saved=await pool.query(
+          "update organizations set name=$1,industry=$2 where id=$3 and status='active' returning id,name,base_currency,industry",
+          [name,industry,organizationId]
+        );
+        if(!saved.rowCount){await pool.query('ROLLBACK');return json(res,404,{error:'not_found'});}
+        await pool.query(
+          "insert into audit_events(organization_id,actor_user_id,action,entity_type,entity_id,after_data) values($1,$2,'business.profile_updated','organization',$1,$3::jsonb)",
+          [organizationId,user.id,JSON.stringify({name,industry})]
+        );
+        await pool.query('COMMIT');
+        const row=saved.rows[0] as any;
+        return json(res,200,{organization:{id:row.id,name:row.name,base_currency:row.base_currency,industry:row.industry,role}});
+      }catch(error){
+        await pool.query('ROLLBACK').catch(()=>undefined);
+        throw error;
+      }finally{await pool.end();}
     }
 
     if(action==='update_location'){

@@ -38,6 +38,13 @@ function safeServerError(code:unknown,status:number){
     email_delivery_unavailable:'Verification email is not configured on this deployment yet.',
     email_delivery_failed:'THE VERGE could not send the verification email right now. Try again shortly.',
     invalid_verification_token:'That verification link is invalid or has expired.',
+    ai_not_in_plan:'AI Copilot is not included in the current plan. Open Plans & Billing to upgrade.',
+    usage_limit_reached:'This business has used its AI allowance for the current billing period.',
+    ai_provider_not_configured:'THE VERGE AI is not configured on this deployment yet.',
+    ai_provider_failed:'THE VERGE AI provider could not complete the analysis. Your quota was not charged.',
+    question_required:'Enter a business question for the AI Copilot.',
+    product_limit_reached:'This plan has reached its product limit. Upgrade to add more products.',
+    location_limit_reached:'This plan has reached its location limit. Upgrade to add another branch or warehouse.',
   };
   if(messages[value])return messages[value];
   if(status>=500||value==='internal_error') return 'The Verge could not complete that request right now. Please try again.';

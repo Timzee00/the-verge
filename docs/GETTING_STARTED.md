@@ -48,3 +48,10 @@ The location selector in THE VERGE determines where inventory and sales are reco
 Day-to-day inventory and sales are designed to keep working locally when connectivity drops. Business/store configuration is server-backed, so changing the business profile or adding/configuring a store currently requires an internet connection.
 
 When the connection returns, queued operational changes synchronize with the server instead of silently overwriting one another.
+
+
+## Getting help inside THE VERGE
+
+Open **Help & Guide** from the left navigation area when you know what you want to do but do not know where the feature lives. The help center is task-based: search for phrases such as **set up store**, **add stock**, **make a sale**, **privacy**, or **API key**, then jump directly to the relevant section.
+
+For a new account, use **Setup Guide** for the first five core setup steps and **Help & Guide** afterward for day-to-day navigation.

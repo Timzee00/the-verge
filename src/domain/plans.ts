@@ -1,0 +1,9 @@
+import type { EntitlementCode, PlanCode } from '../core/types.js';
+export type PlanLimits={products:number|null;locations:number|null;staff:number|null;aiMessages:number;whatsappMessages:number};
+export const PLAN_CATALOG:Record<PlanCode,{name:string;monthlyMinor:number|null;limits:PlanLimits;entitlements:EntitlementCode[];whiteLabel:boolean}>={
+ free:{name:'Free',monthlyMinor:0,limits:{products:100,locations:1,staff:2,aiMessages:0,whatsappMessages:0},whiteLabel:false,entitlements:['personal.finance','business.core','inventory.basic','pos']},
+ starter:{name:'Starter',monthlyMinor:500000,limits:{products:1000,locations:1,staff:5,aiMessages:25,whatsappMessages:0},whiteLabel:false,entitlements:['personal.finance','business.core','inventory.basic','inventory.advanced','pos','industry.modules','ai.basic']},
+ pro:{name:'Pro',monthlyMinor:1000000,limits:{products:5000,locations:3,staff:10,aiMessages:150,whatsappMessages:1000},whiteLabel:false,entitlements:['personal.finance','business.core','inventory.basic','inventory.advanced','pos','multi_location','industry.modules','advanced_accounting','ai.basic','ai.business_insights','whatsapp','api.read']},
+ business:{name:'Business',monthlyMinor:1500000,limits:{products:null,locations:20,staff:50,aiMessages:500,whatsappMessages:5000},whiteLabel:true,entitlements:['personal.finance','business.core','inventory.basic','inventory.advanced','pos','multi_location','industry.modules','advanced_accounting','ai.basic','ai.business_insights','whatsapp','api.read','api.write','webhooks','branding.remove']},
+ enterprise:{name:'Enterprise',monthlyMinor:null,limits:{products:null,locations:null,staff:null,aiMessages:5000,whatsappMessages:50000},whiteLabel:true,entitlements:['personal.finance','business.core','inventory.basic','inventory.advanced','pos','multi_location','industry.modules','advanced_accounting','ai.basic','ai.business_insights','whatsapp','api.read','api.write','webhooks','branding.remove']}
+};

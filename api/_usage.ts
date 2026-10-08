@@ -9,3 +9,9 @@ export async function consumeMonthlyUsage(sql:any,organizationId:string,metric:'
  where organization_usage_monthly.used+excluded.used<=$4 returning used`,[organizationId,key,amount,limit]);
  if(!result.rowCount)throw new Error('usage_limit_reached');return {used:Number(result.rows[0].used),limit,plan:plan.code};
 }
+
+export async function refundMonthlyUsage(sql:any,organizationId:string,metric:'aiMessages'|'whatsappMessages',amount=1){
+ if(!Number.isSafeInteger(amount)||amount<=0)return;
+ const key=metric==='aiMessages'?'ai_messages':'whatsapp_messages';
+ await sql.query("update organization_usage_monthly set used=greatest(0,used-$3),updated_at=now() where organization_id=$1 and period_start=date_trunc('month',now())::date and metric=$2",[organizationId,key,amount]);
+}

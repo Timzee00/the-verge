@@ -75,7 +75,7 @@ export const api={
     revoke:(organizationId:string,keyId:string)=>request<{ok:boolean}>(`/api/keys?organizationId=${encodeURIComponent(organizationId)}&keyId=${encodeURIComponent(keyId)}`,{method:'DELETE'}),
   },
   ai:{
-    info:(organizationId:string)=>request<{tasks:string[];configured:boolean;plan:string}>(`/api/ai/assistant?organizationId=${encodeURIComponent(organizationId)}`),
+    info:(organizationId:string)=>request<{tasks:string[];previewTasks:string[];configured:boolean;plan:string;used:number;limit:number;advanced:boolean}>(`/api/ai/assistant?organizationId=${encodeURIComponent(organizationId)}`),
     ask:(organizationId:string,question:string,locationId?:string)=>request<{answer:string;usage:{used:number;limit:number;plan:string};asOf:string}>('/api/ai/assistant',{method:'POST',body:JSON.stringify({organizationId,question,locationId})})
   },
   billing:{

@@ -48,6 +48,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
     if(!requireSameOrigin(req,res))return;
 
     if(req.method==='POST'){
+      if(!user.email_verified_at)return json(res,403,{error:'email_verification_required'});
       const name=cleanName(req.body?.name);
       const scopes=cleanScopes(req.body?.scopes);
       const activeCount=await sql`select count(*)::int as count from api_credentials where organization_id=${organizationId} and revoked_at is null and (expires_at is null or expires_at>now())`;

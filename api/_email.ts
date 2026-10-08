@@ -30,3 +30,25 @@ export async function sendPasswordResetEmail(to:string,token:string){
   if(!response.ok)throw new Error(`email_provider_${response.status}`);
   return true;
 }
+
+
+export async function sendEmailVerificationEmail(to:string,token:string){
+  const apiKey=String(process.env.RESEND_API_KEY??'').trim();
+  const from=String(process.env.AUTH_EMAIL_FROM??'').trim();
+  const origin=baseUrl();
+  if(!apiKey||!from||!origin)return false;
+  const verifyUrl=`${origin}/verify-email.html?token=${encodeURIComponent(token)}`;
+  const response=await fetch(ENDPOINT,{
+    method:'POST',
+    headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
+    body:JSON.stringify({
+      from,
+      to:[to],
+      subject:'Verify your THE VERGE email',
+      text:`Verify the email address for your THE VERGE account by opening this link within 24 hours: ${verifyUrl}\n\nIf you did not create this account, you can ignore this email.`,
+      html:`<div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827"><h2>Verify your THE VERGE email</h2><p>Confirm this email address to secure your account and unlock sensitive account actions.</p><p><a href="${escapeHtml(verifyUrl)}">Verify email</a></p><p>This link expires in 24 hours. If you did not create this account, you can ignore this email.</p><p style="color:#6b7280">THE VERGE — Powered by Timzee Corp</p></div>`
+    })
+  });
+  if(!response.ok)throw new Error(`email_provider_${response.status}`);
+  return true;
+}

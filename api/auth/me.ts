@@ -11,7 +11,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
     ? await sql`select l.id,l.organization_id as "organizationId",l.name,l.type,l.parent_id as "parentId",l.code,l.active,l.address,l.phone,l.email,l.receipt_name as "receiptName",l.receipt_footer as "receiptFooter",l.setup_completed_at as "setupCompletedAt" from locations l join memberships m on m.organization_id=l.organization_id and m.user_id=${user.id} and m.active=true left join membership_locations ml on ml.location_id=l.id and ml.membership_id=m.id and ml.active=true where l.active=true and (m.role='platform_admin' or ml.location_id is not null) order by l.organization_id,l.name`
     : [];
   return json(res,200,{
-    user:{id:user.id,email:user.email,displayName:user.display_name},
+    user:{id:user.id,email:user.email,displayName:user.display_name,emailVerified:Boolean(user.email_verified_at)},
     organizations:orgs.map((o:any)=>({id:o.id,name:o.name,base_currency:o.base_currency,industry:o.industry,role:o.role})),
     locations
   });

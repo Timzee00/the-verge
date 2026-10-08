@@ -34,6 +34,10 @@ function safeServerError(code:unknown,status:number){
     duplicate_location_name:'That store name is already used in this business.',
     location_limit:'This business has reached its current location limit.',
     invalid_setup_action:'That setup action is not available.',
+    email_verification_required:'Verify your email before creating API credentials.',
+    email_delivery_unavailable:'Verification email is not configured on this deployment yet.',
+    email_delivery_failed:'THE VERGE could not send the verification email right now. Try again shortly.',
+    invalid_verification_token:'That verification link is invalid or has expired.',
   };
   if(messages[value])return messages[value];
   if(status>=500||value==='internal_error') return 'The Verge could not complete that request right now. Please try again.';
@@ -49,12 +53,13 @@ async function request<T>(path:string, init:RequestInit={}):Promise<T>{
 }
 
 export type SessionOrg={id:string;name:string;base_currency:string;industry?:string;role:string};
-export type SessionPayload={user:{id:string;email:string;displayName?:string};organizations:SessionOrg[];locations:Location[]};
+export type SessionPayload={user:{id:string;email:string;displayName?:string;emailVerified:boolean};organizations:SessionOrg[];locations:Location[]};
 export const api={
   me:()=>request<SessionPayload>('/api/auth/me'),
   login:(body:{email:string;password:string})=>request<{user:{id:string;email:string;displayName?:string}}>('/api/auth/login',{method:'POST',body:JSON.stringify(body)}),
   register:(body:{email:string;password:string;displayName:string;organizationName:string;industry:string;locationName:string})=>request<{user:{id:string;email:string;displayName:string};organization:{id:string;name:string;industry:string};location:{id:string;name:string}}>('/api/auth/register',{method:'POST',body:JSON.stringify(body)}),
   requestPasswordReset:(body:{email:string})=>request<{ok:boolean;message:string}>('/api/auth/request-password-reset',{method:'POST',body:JSON.stringify(body)}),
+  requestEmailVerification:()=>request<{ok:boolean;verified:boolean;message:string}>('/api/auth/request-email-verification',{method:'POST',body:'{}'}),
   logout:()=>request<{ok:boolean}>('/api/auth/logout',{method:'POST'}),
   push:(organizationId:string,operations:unknown[])=>request<{results:Array<{id:string;ok:boolean;conflict?:boolean;error?:string;rejected?:boolean;deduplicated?:boolean}>}>('/api/sync/push',{method:'POST',body:JSON.stringify({organizationId,operations})}),
   keys:{

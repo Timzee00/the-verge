@@ -33,10 +33,10 @@ function render(template:string,payload:any){
     const total=Number(payload?.totalMinor??0)/100;
     const receipt=String(payload?.receiptId??'');
     return {text:`${brand} receipt ${receipt}\nTotal: NGN ${total.toLocaleString('en-NG',{minimumFractionDigits:2})}\nThank you for your business.`,
-      html:`<div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827"><h2>${brand}</h2><p>Receipt <strong>${receipt}</strong></p><p>Total: <strong>₦${total.toLocaleString('en-NG',{minimumFractionDigits:2})}</strong></p><p>Thank you for your business.</p><p style="color:#6b7280">Sent with THE VERGE by Timzee Corp</p></div>`};
+      html:`<div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827"><h2>${brand}</h2><p>Receipt <strong>${receipt}</strong></p><p>Total: <strong>₦${total.toLocaleString('en-NG',{minimumFractionDigits:2})}</strong></p><p>Thank you for your business.</p>${payload?.showPlatformBranding===false?'':'<p style="color:#6b7280">Sent with THE VERGE by Timzee Corp</p>'}</div>`};
   }
   if(template==='owner_digest'){
-    return {text:String(payload?.text??''),html:`<div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827"><h2>${brand} business summary</h2><p>${String(payload?.text??'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p><p style="color:#6b7280">THE VERGE — Powered by Timzee Corp</p></div>`};
+    return {text:String(payload?.text??''),html:`<div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827"><h2>${brand} business summary</h2><p>${String(payload?.text??'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>${payload?.showPlatformBranding===false?'':'<p style="color:#6b7280">THE VERGE — Powered by Timzee Corp</p>'}</div>`};
   }
   return {text:String(payload?.text??''),html:undefined};
 }

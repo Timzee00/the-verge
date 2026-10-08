@@ -8,6 +8,7 @@ import { calculateAvailable, calculateStock, validateSaleAgainstSnapshot } from 
 import { deduplicateOperations, nextRetryAt } from '../domain/sync.js';
 import { calculateSetupProgress, hasUsableStoreStock, isStoreCodeValid } from '../domain/setup.js';
 import { allocateFEFO, lotAvailability, requiresTrackedLot, sortLotsFEFO } from '../domain/retail.js';
+import { hasRecommendedModule, recommendedModules } from '../domain/businessModules.js';
 
 equal(parseMajorToMinor('1,250.50'), 125050);
 throws(() => parseMajorToMinor('10.999'));
@@ -77,3 +78,12 @@ deepEqual(sortLotsFEFO(lots,new Date('2026-10-08T00:00:00Z')).map(x=>x.id),['fir
 deepEqual(allocateFEFO(lots,6,new Date('2026-10-08T00:00:00Z')).allocations,[{lotId:'first',batchNumber:'B1',quantity:3},{lotId:'later',batchNumber:'B2',quantity:3}]);
 equal(allocateFEFO(lots,20,new Date('2026-10-08T00:00:00Z')).fulfilled,false);
 equal(requiresTrackedLot({trackBatch:false,trackExpiry:false,productKind:'medicine'}),true);
+
+const pharmacyModules=recommendedModules('Pharmacy');
+equal(pharmacyModules.includes('pos'),true);
+equal(pharmacyModules.includes('batch_expiry'),true);
+equal(pharmacyModules.includes('prescriptions'),true);
+equal(pharmacyModules.includes('restaurant_tables'),false);
+equal(hasRecommendedModule('Restaurant / Food','kitchen_display'),true);
+equal(hasRecommendedModule('Fashion','variants'),true);
+equal(hasRecommendedModule('Services','appointments'),true);

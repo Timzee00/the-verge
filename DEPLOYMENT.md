@@ -42,6 +42,7 @@ Current sequence:
 - `005_account_recovery.sql`: one-time password reset tokens
 - `006_store_setup.sql`: store contact/receipt configuration, setup completion state, and unique store codes
 - `007_retail_pharmacy_foundation.sql`: medicine/regulated product metadata plus batch, expiry, FEFO, quarantine and recall-ready lot storage
+- `008_business_modules.sql`: capability-based presets for retail, supermarket, pharmacy, clinic, restaurant, fashion, printing, real estate, services and other business types
 - `008_email_verification.sql`: one-time email verification tokens for public onboarding
 
 Apply migrations in order against the intended Neon environment. Record the exact migration version before enabling the corresponding server code.
@@ -119,3 +120,10 @@ Do not advertise THE VERGE as pharmacy-grade until lot-level receiving and lot-l
 - near-expiry dashboard and alerts
 - supplier-to-batch traceability and recall report
 - role controls for sensitive/controlled medicine operations
+
+
+## Multi-business product architecture
+
+THE VERGE uses a universal core (POS, inventory, customers, suppliers, purchasing, expenses, accounting, reports, staff, multi-location, offline sync, receipts, audit, exports and notifications) plus vertical modules.
+
+Changing a business type refreshes only preset modules. Explicit manual module choices are retained. This prevents restaurant, pharmacy, fashion, service and other workflows from being forced into one overloaded interface.

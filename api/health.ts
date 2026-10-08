@@ -33,8 +33,8 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
     const required=['app_users','organizations','memberships','locations','membership_locations','sync_changes','auth_rate_limits','api_credentials','inventory_balances','password_reset_tokens','email_verification_tokens','location_setup'];
     const missing=required.filter(name=>!row?.[name]);
     const ready=missing.length===0;
-    const mailConfigured=Boolean(process.env.RESEND_API_KEY&&process.env.AUTH_EMAIL_FROM&&process.env.APP_BASE_URL);
-    const businessMailConfigured=Boolean(process.env.RESEND_API_KEY&&process.env.BUSINESS_EMAIL_FROM);
+    const mailConfigured=Boolean(process.env.BREVO_API_KEY&&process.env.AUTH_EMAIL_FROM&&process.env.APP_BASE_URL);
+    const businessMailConfigured=Boolean(process.env.BREVO_API_KEY&&process.env.BUSINESS_EMAIL_FROM);
     const notificationReady=Boolean(row.outbound_messages&&row.notification_preferences);
     return json(res,ready?200:503,{service:'the-verge',status:ready?'ok':'degraded',database:'connected',schemaReady:ready,mailConfigured,businessMailConfigured,notificationReady,missing});
   }catch{

@@ -22,7 +22,18 @@ export interface InventoryEvent {
   id: ID; organizationId: ID; locationId: ID; productId: ID; type: InventoryEventType;
   quantityDelta: number; unitCostMinor?: number; referenceId?: ID; occurredAt: ISODate; deviceId: ID; localSequence: number; syncState: SyncState; createdAt: ISODate;
 }
-export interface StockReceipt { id: ID; organizationId: ID; locationId: ID; productId: ID; supplierId?: ID; quantity: number; unitCostMinor: number; batchNumber?: string; expiryDate?: ISODate; receivedAt: ISODate; deviceId: ID; }
+export interface StockReceipt { id: ID; organizationId: ID; locationId: ID; productId: ID; supplierId?: ID; quantity: number; unitCostMinor: number; batchNumber?: string; manufactureDate?: ISODate; expiryDate?: ISODate; receivedAt: ISODate; deviceId: ID; }
+export interface InventoryLot {
+  id: ID; organizationId: ID; locationId: ID; productId: ID; supplierId?: ID;
+  batchNumber: string; manufactureDate?: ISODate; expiryDate?: ISODate;
+  quantityReceived: number; quantityAvailable: number; unitCostMinor: number;
+  receivedAt: ISODate; status: 'active'|'quarantined'|'recalled'|'expired'|'depleted';
+}
+export interface RegulatedProductProfile {
+  productId: ID; organizationId: ID; productKind: 'general'|'food'|'medicine'|'medical_device';
+  gtin?: string; nafdacRegNo?: string; genericName?: string; dosageForm?: string; strength?: string;
+  prescriptionRequired: boolean; controlled: boolean; storageCondition?: string;
+}
 
 export interface Customer { id: ID; organizationId: ID; name: string; phone?: string; email?: string; creditLimitMinor?: number; active: boolean; createdAt: ISODate; updatedAt: ISODate; }
 export interface Supplier { id: ID; organizationId: ID; name: string; phone?: string; email?: string; active: boolean; createdAt: ISODate; updatedAt: ISODate; }

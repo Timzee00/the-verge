@@ -41,6 +41,7 @@ Current sequence:
 - `004_scale_foundation.sql`: inventory balance projection and immutable inventory event guard
 - `005_account_recovery.sql`: one-time password reset tokens
 - `006_store_setup.sql`: store contact/receipt configuration, setup completion state, and unique store codes
+- `007_retail_pharmacy_foundation.sql`: medicine/regulated product metadata plus batch, expiry, FEFO, quarantine and recall-ready lot storage
 
 Apply migrations in order against the intended Neon environment. Record the exact migration version before enabling the corresponding server code.
 
@@ -104,3 +105,16 @@ Release requires:
 - mobile smoke tests
 - error-state verification
 - rollback plan
+
+
+## Supermarket / pharmacy release gate
+
+Do not advertise THE VERGE as pharmacy-grade until lot-level receiving and lot-level sale allocation are active end to end. The target workflow is:
+- GTIN/barcode product lookup
+- batch/lot captured on receiving
+- manufacture/expiry dates where applicable
+- FEFO allocation at sale
+- expired/recalled/quarantined stock blocked at POS
+- near-expiry dashboard and alerts
+- supplier-to-batch traceability and recall report
+- role controls for sensitive/controlled medicine operations

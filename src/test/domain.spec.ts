@@ -7,6 +7,7 @@ import { parseMajorToMinor, formatMinor } from '../domain/money.js';
 import { calculateAvailable, calculateStock, validateSaleAgainstSnapshot } from '../domain/inventory.js';
 import { deduplicateOperations, nextRetryAt } from '../domain/sync.js';
 import { calculateSetupProgress, hasUsableStoreStock, isStoreCodeValid } from '../domain/setup.js';
+import { allocateFEFO, lotAvailability, requiresTrackedLot, sortLotsFEFO } from '../domain/retail.js';
 
 equal(parseMajorToMinor('1,250.50'), 125050);
 throws(() => parseMajorToMinor('10.999'));
@@ -63,3 +64,16 @@ equal(hasUsableStoreStock(setupEvents, 'store'), true);
 equal(hasUsableStoreStock(setupEvents, 'other'), false);
 equal(calculateSetupProgress({businessReady:true,storeConfigured:true,productCount:2,hasOpeningStock:true,saleCount:0}),4);
 equal(calculateSetupProgress({businessReady:true,storeConfigured:true,productCount:2,hasOpeningStock:true,saleCount:1}),5);
+
+const lotBase={organizationId:'o',locationId:'l',productId:'p',quantityReceived:10,unitCostMinor:100,receivedAt:'2026-01-01T00:00:00.000Z',status:'active'} as const;
+const lots:any[]=[
+  {...lotBase,id:'later',batchNumber:'B2',expiryDate:'2027-06-01',quantityAvailable:5},
+  {...lotBase,id:'first',batchNumber:'B1',expiryDate:'2026-12-01',quantityAvailable:3},
+  {...lotBase,id:'expired',batchNumber:'B0',expiryDate:'2026-01-01',quantityAvailable:9},
+  {...lotBase,id:'recalled',batchNumber:'BR',expiryDate:'2027-01-01',quantityAvailable:9,status:'recalled'},
+];
+equal(lotAvailability(lots[2],new Date('2026-10-08T00:00:00Z')),'expired');
+deepEqual(sortLotsFEFO(lots,new Date('2026-10-08T00:00:00Z')).map(x=>x.id),['first','later']);
+deepEqual(allocateFEFO(lots,6,new Date('2026-10-08T00:00:00Z')).allocations,[{lotId:'first',batchNumber:'B1',quantity:3},{lotId:'later',batchNumber:'B2',quantity:3}]);
+equal(allocateFEFO(lots,20,new Date('2026-10-08T00:00:00Z')).fulfilled,false);
+equal(requiresTrackedLot({trackBatch:false,trackExpiry:false,productKind:'medicine'}),true);

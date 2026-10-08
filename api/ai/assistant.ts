@@ -53,6 +53,20 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
     }
     if(!authorizedLocationIds.length)return json(res,403,{error:'location_forbidden'});
 
+    const planBeforeCall=await effectivePlan(pool,organizationId);
+    if(planBeforeCall.limits.aiMessages<=0)return json(res,402,{error:'ai_not_in_plan'});
+    const scopeKey=locationId||'all';
+    const cacheable=question===BASIC_TASKS[0];
+    let sourceChangeSeq=0;
+    if(cacheable){
+      const seq=await pool.query("select coalesce(max(change_seq),0)::bigint as seq from sync_changes where organization_id=$1",[organizationId]);
+      sourceChangeSeq=Number(seq.rows[0]?.seq??0);
+      const cached=await pool.query("select content from ai_insights where organization_id=$1 and scope_key=$2 and insight_kind='owner_brief' and source_change_seq=$3 and expires_at>now() order by created_at desc limit 1",[organizationId,scopeKey,sourceChangeSeq]);
+      if(cached.rowCount){
+        const usage=await pool.query("select used from organization_usage_monthly where organization_id=$1 and period_start=date_trunc('month',now())::date and metric='ai_messages' limit 1",[organizationId]);
+        return json(res,200,{answer:String(cached.rows[0].content),usage:{used:Number(usage.rows[0]?.used??0),limit:planBeforeCall.limits.aiMessages,plan:planBeforeCall.code},cached:true,asOf:new Date().toISOString()});
+      }
+    }
     const provider=providerConfig();
     if(!provider)return json(res,503,{error:'ai_provider_not_configured'});
     let reservation:any=null;
@@ -86,7 +100,10 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
       const data:any=await response.json();
       const answer=String(data?.choices?.[0]?.message?.content??'').trim();
       if(!answer)throw new Error('ai_provider_failed');
-      return json(res,200,{answer,usage:{used:reservation.used,limit:reservation.limit,plan:reservation.plan},asOf:new Date().toISOString()});
+      if(cacheable){
+        await pool.query("insert into ai_insights(organization_id,scope_key,insight_kind,source_change_seq,content,model,expires_at) values($1,$2,'owner_brief',$3,$4,$5,now()+interval '20 minutes') on conflict(organization_id,scope_key,insight_kind,source_change_seq) do update set content=excluded.content,model=excluded.model,created_at=now(),expires_at=excluded.expires_at",[organizationId,scopeKey,sourceChangeSeq,answer,provider.model]);
+      }
+      return json(res,200,{answer,usage:{used:reservation.used,limit:reservation.limit,plan:reservation.plan},cached:false,asOf:new Date().toISOString()});
     }catch(error:any){
       if(reservation)await refundMonthlyUsage(pool,organizationId,'aiMessages',1).catch(()=>undefined);
       const code=String(error?.message??error);

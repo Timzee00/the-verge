@@ -56,3 +56,9 @@ select,textarea{font:inherit}select,textarea{display:block;width:100%;margin-top
 .plan-card h2{margin:0}.plan-card h2 small{font-size:.75rem;font-weight:500;margin-left:4px}
 .billing-pending{border-style:dashed}
 @media(max-width:720px){.plan-grid{grid-template-columns:1fr}}
+
+.assistant-task-grid{display:grid;gap:10px;margin-top:14px}
+.assistant-task{width:100%;text-align:left;border:1px solid var(--border);background:var(--surface-2);border-radius:12px;padding:12px 14px;cursor:pointer}
+.assistant-task:hover{transform:translateY(-1px)}
+.assistant-input{width:100%;resize:vertical;min-height:150px}
+.assistant-answer{margin-top:16px}.assistant-response{max-width:900px}.assistant-response p{margin:.45rem 0;white-space:pre-wrap}

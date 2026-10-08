@@ -67,6 +67,10 @@ export const api={
     create:(organizationId:string,body:{name:string;scopes:string[];expiresAt?:string|null})=>request<{key:{id:string;name:string;keyPrefix:string;scopes:string[];expiresAt?:string|null;secret:string}}>(`/api/keys?organizationId=${encodeURIComponent(organizationId)}`,{method:'POST',body:JSON.stringify(body)}),
     revoke:(organizationId:string,keyId:string)=>request<{ok:boolean}>(`/api/keys?organizationId=${encodeURIComponent(organizationId)}&keyId=${encodeURIComponent(keyId)}`,{method:'DELETE'}),
   },
+  ai:{
+    info:(organizationId:string)=>request<{tasks:string[];configured:boolean;plan:string}>(`/api/ai/assistant?organizationId=${encodeURIComponent(organizationId)}`),
+    ask:(organizationId:string,question:string,locationId?:string)=>request<{answer:string;usage:{used:number;limit:number;plan:string};asOf:string}>('/api/ai/assistant',{method:'POST',body:JSON.stringify({organizationId,question,locationId})})
+  },
   billing:{
     status:(organizationId:string)=>request<any>(`/api/billing?organizationId=${encodeURIComponent(organizationId)}`),
     requestUpgrade:(organizationId:string,plan:'starter'|'pro'|'business',months=1)=>request<any>('/api/billing',{method:'POST',body:JSON.stringify({organizationId,plan,months})})

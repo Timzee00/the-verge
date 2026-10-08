@@ -17,7 +17,8 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
      and (m.role in ('business_owner','platform_admin') or ml.location_id is not null) limit 1`;
  const sale=rows[0] as any;if(!sale)return json(res,404,{error:'not_found'});
  if(!sale.customer_id)return json(res,400,{error:'sale_customer_required'});
- const queued=await enqueueCustomerEmail({organizationId,customerId:String(sale.customer_id),templateCode:'sale_receipt',subject:`Receipt from ${String(sale.receipt_name??sale.business_name)}`,payload:{businessName:String(sale.receipt_name??sale.business_name),receiptId:String(sale.id).slice(0,8).toUpperCase(),totalMinor:Number(sale.total_minor)},kind:'transactional'});
+ const branding=await sql`select 1 from entitlements where organization_id=${organizationId} and capability='branding.remove' and effect='allow' and starts_at<=now() and (expires_at is null or expires_at>now()) limit 1`;
+ const queued=await enqueueCustomerEmail({organizationId,customerId:String(sale.customer_id),templateCode:'sale_receipt',subject:`Receipt from ${String(sale.receipt_name??sale.business_name)}`,payload:{businessName:String(sale.receipt_name??sale.business_name),receiptId:String(sale.id).slice(0,8).toUpperCase(),totalMinor:Number(sale.total_minor),showPlatformBranding:!branding.length},kind:'transactional'});
  if(!queued.queued)return json(res,400,{error:queued.reason});
  const processed=await processEmailQueue(5);
  return json(res,200,{ok:true,queued,processed});

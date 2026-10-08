@@ -5,7 +5,10 @@ export type SyncState = 'pending' | 'synced' | 'conflict' | 'rejected';
 
 export interface Organization { id: ID; name: string; baseCurrency: CurrencyCode; createdAt: ISODate; active: boolean; }
 export type LocationType = 'region'|'branch'|'warehouse';
-export interface Location { id: ID; organizationId: ID; name: string; type: LocationType; parentId?: ID; active: boolean; }
+export interface Location {
+  id: ID; organizationId: ID; name: string; type: LocationType; parentId?: ID; code?: string; active: boolean;
+  address?: string; phone?: string; email?: string; receiptName?: string; receiptFooter?: string; setupCompletedAt?: ISODate;
+}
 
 export interface Product {
   id: ID; organizationId: ID; sku: string; barcode?: string; name: string; brand?: string; category?: string;

@@ -28,6 +28,13 @@ function safeServerError(code:unknown,status:number){
     origin_forbidden:'The request origin was not accepted.',
     not_found:'That resource was not found.',
     api_key_limit:'This workspace has reached its active API credential limit. Revoke an unused credential first.',
+    invalid_location_code:'Use 2–20 letters, numbers, hyphens or underscores for the store code.',
+    invalid_location_email:'Enter a valid store email address.',
+    invalid_location_type:'Choose store/branch or warehouse.',
+    duplicate_location_code:'That store code is already used in this business.',
+    duplicate_location_name:'That store name is already used in this business.',
+    location_limit:'This business has reached its current location limit.',
+    invalid_setup_action:'That setup action is not available.',
   };
   if(messages[value])return messages[value];
   if(value.startsWith('invalid_'))return 'The submitted data could not be accepted. Check the entry and try again.';
@@ -54,6 +61,11 @@ export const api={
     list:(organizationId:string)=>request<{keys:Array<{id:string;name:string;keyPrefix:string;scopes:string[];createdAt:string;expiresAt?:string|null;revokedAt?:string|null;lastUsedAt?:string|null}>}>(`/api/keys?organizationId=${encodeURIComponent(organizationId)}`),
     create:(organizationId:string,body:{name:string;scopes:string[];expiresAt?:string|null})=>request<{key:{id:string;name:string;keyPrefix:string;scopes:string[];expiresAt?:string|null;secret:string}}>(`/api/keys?organizationId=${encodeURIComponent(organizationId)}`,{method:'POST',body:JSON.stringify(body)}),
     revoke:(organizationId:string,keyId:string)=>request<{ok:boolean}>(`/api/keys?organizationId=${encodeURIComponent(organizationId)}&keyId=${encodeURIComponent(keyId)}`,{method:'DELETE'}),
+  },
+  business:{
+    updateProfile:(organizationId:string,body:{name:string;industry:string})=>request<{organization:SessionOrg}>('/api/business/setup',{method:'POST',body:JSON.stringify({action:'update_business',organizationId,...body})}),
+    updateLocation:(organizationId:string,body:{locationId:string;name:string;code:string;type:'branch'|'warehouse';address?:string;phone?:string;email?:string;receiptName?:string;receiptFooter?:string})=>request<{location:Location}>('/api/business/setup',{method:'POST',body:JSON.stringify({action:'update_location',organizationId,...body})}),
+    createLocation:(organizationId:string,body:{name:string;code:string;type:'branch'|'warehouse';address?:string})=>request<{location:Location}>('/api/business/setup',{method:'POST',body:JSON.stringify({action:'create_location',organizationId,...body})})
   },
   pull:(organizationId:string,cursor='0',cutoff='')=>request<{products:Product[];locations:Location[];inventoryEvents:InventoryEvent[];sales:Sale[];saleItems:SaleItem[];customers:Customer[];expenses:Expense[];serverTime:string;cutoff:string;nextCursor:string;hasMore:boolean}>(`/api/sync/pull?organizationId=${encodeURIComponent(organizationId)}&cursor=${encodeURIComponent(cursor)}${cutoff?`&cutoff=${encodeURIComponent(cutoff)}`:''}`)
 };

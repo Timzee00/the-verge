@@ -16,9 +16,10 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
       to_regclass('public.auth_rate_limits') as auth_rate_limits,
       to_regclass('public.api_credentials') as api_credentials,
       to_regclass('public.inventory_balances') as inventory_balances,
-      to_regclass('public.password_reset_tokens') as password_reset_tokens`;
+      to_regclass('public.password_reset_tokens') as password_reset_tokens,
+      exists(select 1 from information_schema.columns where table_schema='public' and table_name='locations' and column_name='setup_completed_at') as location_setup`;
     const row=rows[0] as any;
-    const required=['app_users','organizations','memberships','locations','membership_locations','sync_changes','auth_rate_limits','api_credentials','inventory_balances','password_reset_tokens'];
+    const required=['app_users','organizations','memberships','locations','membership_locations','sync_changes','auth_rate_limits','api_credentials','inventory_balances','password_reset_tokens','location_setup'];
     const missing=required.filter(name=>!row?.[name]);
     const ready=missing.length===0;
     const mailConfigured=Boolean(process.env.RESEND_API_KEY&&process.env.AUTH_EMAIL_FROM&&process.env.APP_BASE_URL);

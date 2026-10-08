@@ -97,12 +97,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         for(let i=0;i<itemRows.rows.length;i++){
           const item=itemRows.rows[i] as any, event=events[i];
           const quantity=Number(item.quantity);
-          if(!event||typeof event.id!=='string'||seen.has(event.id)||event.referenceId!==p.saleId||event.locationId!==saleRow.location_id||event.productId!==item.product_id||event.type!=='sale_void'||Number(event.quantityDelta)!==quantity||(event.deviceId&&event.deviceId!==op.deviceId)) throw new Error('invalid_void_inventory_event');
+          if(!event||typeof event.id!=='string'||seen.has(event.id)||event.referenceId!==p.saleId||event.locationId!==saleRow.location_id||event.productId!==item.product_id||event.type!=='sale_void'||Number(event.quantityDelta)!==quantity||(event.deviceId&&event.deviceId!==op.deviceId)||!Number.isSafeInteger(event.localSequence)||event.localSequence!==op.localSequence+i+1) throw new Error('invalid_void_inventory_event');
           seen.add(event.id);
           await pool.query('select pg_advisory_xact_lock(hashtextextended($1,0))',['inventory:'+organizationId+':'+saleRow.location_id+':'+item.product_id]);
           const existingVoid=await pool.query('select id from inventory_events where id=$1 limit 1',[event.id]);
           if(existingVoid.rowCount) continue;
-          await pool.query("insert into inventory_events (id,organization_id,location_id,product_id,event_type,quantity_delta,unit_cost_minor,reference_id,occurred_at,device_id,local_sequence,created_at,created_by) values ($1,$2,$3,$4,'sale_void',$5,$6,$7,$8,$9,$10,$11,$12)",[event.id,organizationId,saleRow.location_id,item.product_id,quantity,Number(item.unit_cost_minor),p.saleId,event.occurredAt??new Date().toISOString(),op.deviceId,event.localSequence+i+1,event.createdAt??new Date().toISOString(),user.id]);
+          await pool.query("insert into inventory_events (id,organization_id,location_id,product_id,event_type,quantity_delta,unit_cost_minor,reference_id,occurred_at,device_id,local_sequence,created_at,created_by) values ($1,$2,$3,$4,'sale_void',$5,$6,$7,$8,$9,$10,$11,$12)",[event.id,organizationId,saleRow.location_id,item.product_id,quantity,Number(item.unit_cost_minor),p.saleId,event.occurredAt??new Date().toISOString(),op.deviceId,event.localSequence,event.createdAt??new Date().toISOString(),user.id]);
           await change(pool,organizationId,'inventory_event',event.id);
         }
         const originalJournal=await pool.query(
@@ -126,6 +126,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await audit(pool,organizationId,user.id,'sale.voided','sale',p.saleId,{status:'voided',reversalJournalEntryId:voidJournalId},String(p.reason).trim());
       } else if (op.entity === 'inventory_event') {
         if (pIdentity(op.payload, op.entityId, organizationId, op.deviceId)) throw new Error(pIdentity(op.payload, op.entityId, organizationId, op.deviceId)!);
+        if(!Number.isSafeInteger(p.localSequence)||p.localSequence!==op.localSequence) throw new Error('operation_identity_mismatch');
         const eventType=(op.payload as any)?.type;
         const delta=(op.payload as any)?.quantityDelta;
         const direction=(INVENTORY_SIGN as any)[eventType];
@@ -157,6 +158,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await pool.query(`insert into inventory_events (id,organization_id,location_id,product_id,event_type,quantity_delta,unit_cost_minor,reference_id,occurred_at,device_id,local_sequence,created_at,created_by)
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
           on conflict (id) do nothing`, [p.id, organizationId, p.locationId, p.productId, p.type, p.quantityDelta, p.unitCostMinor ?? null, p.referenceId ?? null, p.occurredAt, op.deviceId, op.localSequence, p.createdAt ?? new Date().toISOString(), user.id]);
+        await audit(pool,organizationId,user.id,'inventory_event.created','inventory_event',p.id,{type:p.type,locationId:p.locationId,productId:p.productId,quantityDelta:p.quantityDelta});
+        await change(pool,organizationId,'inventory_event',p.id);
       } else if (op.entity === 'product') {
         if(p.id!==op.entityId || (p.organizationId&&p.organizationId!==organizationId) || typeof p.sku!=='string' || !p.sku.trim() || typeof p.name!=='string' || !p.name.trim() || typeof p.unit!=='string' || !p.unit.trim()) throw new Error('invalid_product');
         if(!hasSafeMinor(p.standardCostMinor)||!hasSafeMinor(p.retailPriceMinor) || (p.wholesalePriceMinor!=null&&!hasSafeMinor(p.wholesalePriceMinor)) || (p.minimumPriceMinor!=null&&!hasSafeMinor(p.minimumPriceMinor))) throw new Error('invalid_product');
@@ -177,6 +180,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!sale || !items.length || sale.id!==op.entityId) throw new Error('invalid_sale_payload');
         if (sale.organizationId && sale.organizationId!==organizationId) throw new Error('operation_identity_mismatch');
         if (sale.deviceId && sale.deviceId!==op.deviceId) throw new Error('operation_identity_mismatch');
+        if(!Number.isSafeInteger(sale.localSequence)||sale.localSequence!==op.localSequence) throw new Error('operation_identity_mismatch');
         if (!['cash','bank','transfer','card','credit'].includes(sale.paymentMethod) || sale.status!=='completed') throw new Error('invalid_sale_state');
         if (!Number.isSafeInteger(sale.subtotalMinor)||sale.subtotalMinor<0||!Number.isSafeInteger(sale.discountMinor)||sale.discountMinor<0||!Number.isSafeInteger(sale.totalMinor)||sale.totalMinor<0) throw new Error('invalid_sale_totals');
         if (!(await locationAllowed(pool,role,membershipId,organizationId,sale.locationId))) throw new Error('location_forbidden');
@@ -219,7 +223,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             values ($1,$2,$3,$4,$5,$6,$7) on conflict (id) do nothing`, [item.id,sale.id,item.productId,item.quantity,item.unitPriceMinor,authoritativeUnitCost,item.discountMinor]);
 
           const event = embeddedEvents[index];
-          if (!event || event.referenceId!==sale.id || event.locationId!==sale.locationId || event.productId!==item.productId || event.type!=='sale' || Number(event.quantityDelta)!==-Number(item.quantity) || event.deviceId && event.deviceId!==op.deviceId) throw new Error('invalid_sale_inventory_event');
+          if (!event || event.referenceId!==sale.id || event.locationId!==sale.locationId || event.productId!==item.productId || event.type!=='sale' || Number(event.quantityDelta)!==-Number(item.quantity) || event.deviceId && event.deviceId!==op.deviceId || !Number.isSafeInteger(event.localSequence) || event.localSequence!==op.localSequence+index+1) throw new Error('invalid_sale_inventory_event');
           const existingEvent = await pool.query('select 1 from inventory_events where id=$1 limit 1', [event.id]);
           if (existingEvent.rowCount) continue;
           await pool.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [`inventory:${organizationId}:${sale.locationId}:${item.productId}`]);

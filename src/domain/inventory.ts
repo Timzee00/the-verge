@@ -8,12 +8,14 @@ export function validateInventoryEvent(event: Pick<InventoryEvent,'type'|'quanti
   if (!event.locationId || !event.productId) throw new Error('Inventory event requires location and product');
 }
 
+const countsLocally=(event:InventoryEvent)=>event.syncState!=='rejected'&&event.syncState!=='conflict';
+
 export function calculateStock(events: InventoryEvent[], locationId: ID, productId: ID): number {
-  return events.filter((e) => e.locationId === locationId && e.productId === productId && e.type !== 'reservation' && e.type !== 'reservation_release').reduce((sum, e) => sum + e.quantityDelta, 0);
+  return events.filter((e) => countsLocally(e) && e.locationId === locationId && e.productId === productId && e.type !== 'reservation' && e.type !== 'reservation_release').reduce((sum, e) => sum + e.quantityDelta, 0);
 }
 
 export function calculateReserved(events: InventoryEvent[], locationId: ID, productId: ID): number {
-  return events.filter((e) => e.locationId === locationId && e.productId === productId)
+  return events.filter((e) => countsLocally(e) && e.locationId === locationId && e.productId === productId)
     .reduce((sum, e) => sum + (e.type === 'reservation' ? e.quantityDelta : e.type === 'reservation_release' ? -Math.abs(e.quantityDelta) : 0), 0);
 }
 

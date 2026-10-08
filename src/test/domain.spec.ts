@@ -4,7 +4,7 @@ function deepEqual(a: unknown, b: unknown, message='deep equality failed') { equ
 function throws(fn: () => unknown) { let thrown = false; try { fn(); } catch { thrown = true; } assert(thrown, 'expected function to throw'); }
 import { assertBalanced, buildSaleJournalLines } from '../domain/accounting.js';
 import { parseMajorToMinor, formatMinor } from '../domain/money.js';
-import { calculateAvailable, validateSaleAgainstSnapshot } from '../domain/inventory.js';
+import { calculateAvailable, calculateStock, validateSaleAgainstSnapshot } from '../domain/inventory.js';
 import { deduplicateOperations, nextRetryAt } from '../domain/sync.js';
 
 equal(parseMajorToMinor('1,250.50'), 125050);
@@ -26,10 +26,14 @@ const available = calculateAvailable([
 ], 'l', 'p');
 equal(available, 0);
 deepEqual(validateSaleAgainstSnapshot(0, 1).reason, 'insufficient_stock');
+equal(calculateStock([
+  { id:'accepted', organizationId:'o', locationId:'l', productId:'p', type:'opening', quantityDelta:5, occurredAt:'2026-01-01T00:00:00.000Z', deviceId:'d1', localSequence:1, syncState:'synced', createdAt:'2026-01-01T00:00:00.000Z' },
+  { id:'rejected-sale', organizationId:'o', locationId:'l', productId:'p', type:'sale', quantityDelta:-3, occurredAt:'2026-01-01T00:01:00.000Z', deviceId:'d1', localSequence:2, syncState:'rejected', createdAt:'2026-01-01T00:01:00.000Z' },
+], 'l', 'p'),5);
 
 const ops = deduplicateOperations([
-  { id:'2', deviceId:'d', entity:'sale', entityId:'s', operation:'create', payload:{}, createdAt:'2026-01-02', attempts:0, state:'pending' },
-  { id:'1', deviceId:'d', entity:'sale', entityId:'s', operation:'create', payload:{}, createdAt:'2026-01-01', attempts:0, state:'pending' },
+  { id:'2', deviceId:'d', localSequence:2, entity:'sale', entityId:'s', operation:'create', payload:{}, createdAt:'2026-01-02', attempts:0, state:'pending' },
+  { id:'1', deviceId:'d', localSequence:1, entity:'sale', entityId:'s', operation:'create', payload:{}, createdAt:'2026-01-01', attempts:0, state:'pending' },
 ]);
 equal(ops.length, 1);
 assert(nextRetryAt(0).endsWith('Z'));

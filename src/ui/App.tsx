@@ -165,27 +165,27 @@ export default function App(){
           if(op.entity==='expense')await localDB.expenses.update(op.entityId,{syncState:'synced'});
           if(op.entity==='sale'){
             await localDB.sales.update(op.entityId,{syncState:'synced'});
-            if(op.operation==='void'){
-              const payload=op.payload as {inventoryEvents?:InventoryEvent[]};
-              for(const event of payload.inventoryEvents??[])await localDB.inventoryEvents.update(event.id,{syncState:'synced'});
-            }
+            const payload=op.payload as {inventoryEvents?:InventoryEvent[]};
+            for(const event of payload.inventoryEvents??[])await localDB.inventoryEvents.update(event.id,{syncState:'synced'});
           }
         }else if(r.conflict){
           conflictCount++;
           await localDB.syncOperations.update(op.id,{state:'conflict',attempts:op.attempts+1,lastError:r.error??'Conflict',nextAttemptAt:undefined});
           if(op.entity==='inventory_event')await localDB.inventoryEvents.update(op.entityId,{syncState:'conflict'});
           if(op.entity==='expense')await localDB.expenses.update(op.entityId,{syncState:'conflict'});
-          if(op.entity==='sale')await localDB.sales.update(op.entityId,{syncState:'conflict'});
+          if(op.entity==='sale'){
+            await localDB.sales.update(op.entityId,{syncState:'conflict'});
+            const payload=op.payload as {inventoryEvents?:InventoryEvent[]};
+            for(const event of payload.inventoryEvents??[])await localDB.inventoryEvents.update(event.id,{syncState:'conflict'});
+          }
         }else if(r.rejected){
           await localDB.syncOperations.update(op.id,{state:'rejected',attempts:op.attempts+1,lastError:r.error??'Rejected',nextAttemptAt:undefined});
           if(op.entity==='inventory_event')await localDB.inventoryEvents.update(op.entityId,{syncState:'rejected'});
           if(op.entity==='expense')await localDB.expenses.update(op.entityId,{syncState:'rejected'});
           if(op.entity==='sale'){
-            await localDB.sales.update(op.entityId,{status:op.operation==='void'?'completed':'completed',syncState:'rejected'});
-            if(op.operation==='void'){
-              const payload=op.payload as {inventoryEvents?:InventoryEvent[]};
-              for(const event of payload.inventoryEvents??[])await localDB.inventoryEvents.update(event.id,{syncState:'rejected'});
-            }
+            await localDB.sales.update(op.entityId,{status:'completed',syncState:'rejected'});
+            const payload=op.payload as {inventoryEvents?:InventoryEvent[]};
+            for(const event of payload.inventoryEvents??[])await localDB.inventoryEvents.update(event.id,{syncState:'rejected'});
           }
         }else{
           const attempts=op.attempts+1;

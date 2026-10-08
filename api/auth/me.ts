@@ -1,6 +1,7 @@
 import type { VercelRequest,VercelResponse } from '@vercel/node';
 import { db } from '../_db';
 import { json,method,requireUser } from '../_http';
+import { isPlatformAdminEmail } from '../_platform';
 
 export default async function handler(req:VercelRequest,res:VercelResponse){
   if(!method(req,res,['GET']))return;
@@ -13,6 +14,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   return json(res,200,{
     user:{id:user.id,email:user.email,displayName:user.display_name,emailVerified:Boolean(user.email_verified_at)},
     organizations:orgs.map((o:any)=>({id:o.id,name:o.name,base_currency:o.base_currency,industry:o.industry,role:o.role})),
-    locations
+    locations,
+    isPlatformAdmin:isPlatformAdminEmail(user.email)
   });
 }

@@ -55,8 +55,8 @@ export interface Budget { id: ID; userId?: ID; category: string; period: 'weekly
 export interface SavingsGoal { id: ID; userId?: ID; name: string; targetMinor: number; currentMinor: number; deadline?: ISODate; active: boolean; }
 export interface Debt { id: ID; userId?: ID; direction: 'owed_to_me'|'i_owe'; name: string; principalMinor: number; paidMinor: number; dueDate?: ISODate; active: boolean; }
 
-export type PlanCode = 'free'|'business'|'pro'|'enterprise';
-export type EntitlementCode = 'personal.finance'|'business.core'|'inventory.basic'|'inventory.advanced'|'pos'|'multi_location'|'advanced_accounting'|'api.read'|'api.write'|'webhooks'|'whatsapp'|'ai.basic'|'ai.business_insights'|'industry.modules';
+export type PlanCode = 'free'|'starter'|'pro'|'business'|'enterprise';
+export type EntitlementCode = 'personal.finance'|'business.core'|'inventory.basic'|'inventory.advanced'|'pos'|'multi_location'|'advanced_accounting'|'api.read'|'api.write'|'webhooks'|'whatsapp'|'ai.basic'|'ai.business_insights'|'industry.modules'|'branding.remove';
 export interface EntitlementGrant { id: ID; subjectId: ID; code: EntitlementCode; source: 'plan'|'promotion'|'manual'|'system'; startsAt: ISODate; expiresAt?: ISODate; active: boolean; reason?: string; }
 
 export type RoleCode = 'platform_owner'|'platform_admin'|'support'|'billing_admin'|'security_admin'|'business_owner'|'manager'|'cashier'|'inventory_staff'|'accountant'|'staff';

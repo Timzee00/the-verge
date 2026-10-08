@@ -6,6 +6,7 @@ import { assertBalanced, buildSaleJournalLines } from '../domain/accounting.js';
 import { parseMajorToMinor, formatMinor } from '../domain/money.js';
 import { calculateAvailable, calculateStock, validateSaleAgainstSnapshot } from '../domain/inventory.js';
 import { deduplicateOperations, nextRetryAt } from '../domain/sync.js';
+import { calculateSetupProgress, hasUsableStoreStock, isStoreCodeValid } from '../domain/setup.js';
 
 equal(parseMajorToMinor('1,250.50'), 125050);
 throws(() => parseMajorToMinor('10.999'));
@@ -47,3 +48,18 @@ equal(calculateSale({product:saleProduct,quantity:2,unitPriceMinor:1500,discount
 throws(() => calculateSale({product:saleProduct,quantity:2,unitPriceMinor:500,discountMinor:1,paymentMethod:'cash'}));
 equal(calculateSale({product:saleProduct,quantity:0.5,unitPriceMinor:1500,paymentMethod:'cash'}).totalMinor,750);
 throws(() => calculateSale({product:saleProduct,quantity:0.1234567,unitPriceMinor:1500,paymentMethod:'cash'}));
+
+
+equal(isStoreCodeValid('MAIN'), true);
+equal(isStoreCodeValid('ikeja-01'), true);
+equal(isStoreCodeValid('x'), false);
+equal(isStoreCodeValid('bad code'), false);
+
+const setupEvents = [
+  { id:'setup-accepted', organizationId:'o', locationId:'store', productId:'p', type:'purchase', quantityDelta:4, occurredAt:'2026-01-01T00:00:00.000Z', deviceId:'d1', localSequence:1, syncState:'synced', createdAt:'2026-01-01T00:00:00.000Z' },
+  { id:'setup-rejected', organizationId:'o', locationId:'other', productId:'p', type:'purchase', quantityDelta:8, occurredAt:'2026-01-01T00:01:00.000Z', deviceId:'d1', localSequence:2, syncState:'rejected', createdAt:'2026-01-01T00:01:00.000Z' },
+] as any;
+equal(hasUsableStoreStock(setupEvents, 'store'), true);
+equal(hasUsableStoreStock(setupEvents, 'other'), false);
+equal(calculateSetupProgress({businessReady:true,storeConfigured:true,productCount:2,hasOpeningStock:true,saleCount:0}),4);
+equal(calculateSetupProgress({businessReady:true,storeConfigured:true,productCount:2,hasOpeningStock:true,saleCount:1}),5);

@@ -2,7 +2,6 @@ import type { Customer, Expense, InventoryEvent, Location, Product, Sale, SaleIt
 
 function safeServerError(code:unknown,status:number){
   const value=String(code??'');
-  if(status>=500||value==='internal_error') return 'The Verge could not complete that request right now. Please try again.';
   const messages:Record<string,string>={
     unauthorized:'Your session has expired. Sign in again.',
     forbidden:'You do not have permission to perform that action.',
@@ -37,6 +36,7 @@ function safeServerError(code:unknown,status:number){
     invalid_setup_action:'That setup action is not available.',
   };
   if(messages[value])return messages[value];
+  if(status>=500||value==='internal_error') return 'The Verge could not complete that request right now. Please try again.';
   if(value.startsWith('invalid_'))return 'The submitted data could not be accepted. Check the entry and try again.';
   return status===404?'The requested Verge service was not found.':'The request could not be completed.';
 }

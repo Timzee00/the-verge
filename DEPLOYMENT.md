@@ -38,8 +38,13 @@ Current sequence:
 - `001_*`: original core schema
 - `002_*`: authentication and sync foundation
 - `003_production_hardening.sql`: location scopes, sync sequencing, auth throttling, API credentials, and integrity constraints
+- `004_scale_foundation.sql`: inventory balance projection and immutable inventory event guard
+- `005_account_recovery.sql`: one-time password reset tokens
+- `006_store_setup.sql`: store contact/receipt configuration, setup completion state, and unique store codes
 
 Apply migrations in order against the intended Neon environment. Record the exact migration version before enabling the corresponding server code.
+
+Migrations `004`–`006` are additive and must be applied **before** deploying application code that requires their tables or columns. For `006_store_setup.sql`, verify that legacy blank/duplicate store codes were normalized and that the `locations_org_code_unique` index exists before enabling public onboarding.
 
 ## Preview release process
 
@@ -50,9 +55,11 @@ Apply migrations in order against the intended Neon environment. Record the exac
 5. Run the complete Vite build.
 6. Deploy a Vercel Preview.
 7. Verify the preview against a test database, never the real customer database.
-8. Test registration, login, logout, refresh, offline work, reconnect, duplicate sync, and authorization.
-9. Confirm no secrets appear in browser bundles or logs.
-10. Promote to Production only after the smoke-test checklist passes.
+8. Test registration, login, logout, password reset, refresh, offline work, reconnect, duplicate sync, and authorization.
+9. Complete the new-user Setup Guide end to end: business profile → selected store → store details → products → opening stock → first sale.
+10. Add a second store and verify stock/sales remain scoped to the selected store.
+11. Confirm no secrets appear in browser bundles or logs.
+12. Promote to Production only after the smoke-test checklist passes.
 
 ## Database safety
 

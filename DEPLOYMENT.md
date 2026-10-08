@@ -42,10 +42,11 @@ Current sequence:
 - `005_account_recovery.sql`: one-time password reset tokens
 - `006_store_setup.sql`: store contact/receipt configuration, setup completion state, and unique store codes
 - `007_retail_pharmacy_foundation.sql`: medicine/regulated product metadata plus batch, expiry, FEFO, quarantine and recall-ready lot storage
+- `008_email_verification.sql`: one-time email verification tokens for public onboarding
 
 Apply migrations in order against the intended Neon environment. Record the exact migration version before enabling the corresponding server code.
 
-Migrations `004`–`006` are additive and must be applied **before** deploying application code that requires their tables or columns. For `006_store_setup.sql`, verify that legacy blank/duplicate store codes were normalized and that the `locations_org_code_unique` index exists before enabling public onboarding.
+Migrations `004`–`008` are additive and must be applied **before** deploying application code that requires their tables or columns. For `006_store_setup.sql`, verify that legacy blank/duplicate store codes were normalized and that the `locations_org_code_unique` index exists before enabling public onboarding. Verify `008_email_verification.sql` before opening self-service registration, because registration now issues a one-time verification token.
 
 ## Preview release process
 
@@ -56,7 +57,7 @@ Migrations `004`–`006` are additive and must be applied **before** deploying a
 5. Run the complete Vite build.
 6. Deploy a Vercel Preview.
 7. Verify the preview against a test database, never the real customer database.
-8. Test registration, login, logout, password reset, refresh, offline work, reconnect, duplicate sync, and authorization.
+8. Test registration, verification-email delivery, verification-link expiry/one-time use, login, logout, password reset, refresh, offline work, reconnect, duplicate sync, and authorization.
 9. Complete the new-user Setup Guide end to end: business profile → selected store → store details → products → opening stock → first sale.
 10. Add a second store and verify stock/sales remain scoped to the selected store.
 11. Confirm no secrets appear in browser bundles or logs.

@@ -19,6 +19,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
       to_regclass('public.password_reset_tokens') as password_reset_tokens,
       to_regclass('public.billing_upgrade_requests') as billing_upgrade_requests,
       to_regclass('public.organization_usage_monthly') as organization_usage_monthly,
+      to_regclass('public.ai_insights') as ai_insights,
       to_regclass('public.email_verification_tokens') as email_verification_tokens,
       (
         select count(*)=6

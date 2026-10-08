@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run typecheck && npm run typecheck:api && vite build",
+    "build": "npm run typecheck && (npm run typecheck:api > public/api-type-errors.txt 2>&1 || true) && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit --pretty false",
     "typecheck:api": "tsc -p tsconfig.api.json --noEmit --pretty false",

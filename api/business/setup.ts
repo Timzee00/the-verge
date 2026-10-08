@@ -1,6 +1,7 @@
 import type { VercelRequest,VercelResponse } from '@vercel/node';
 import { db,transactionPool } from '../_db';
 import { cleanText,json,method,requireSameOrigin,requireUser } from '../_http';
+import { assertPlanCapacity } from '../_plans';
 
 const OWNER_ROLES=new Set(['business_owner','platform_admin']);
 const MANAGER_ROLES=new Set(['business_owner','manager','platform_admin']);
@@ -166,6 +167,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
     }
 
     if(action==='create_location'){
+      try{const capPool=transactionPool();try{await assertPlanCapacity(capPool,organizationId,'locations');}finally{await capPool.end();}}catch(error:any){if(String(error?.code)==='PLAN_LIMIT')return json(res,403,{error:'location_limit_reached',plan:error.plan,limit:error.limit});throw error;}
       if(!OWNER_ROLES.has(role))return json(res,403,{error:'forbidden'});
       const count=await sql`select count(*)::int as count from locations where organization_id=${organizationId} and active=true`;
       if(Number((count[0] as any)?.count??0)>=250)return json(res,409,{error:'location_limit'});

@@ -2,7 +2,7 @@ alter table subscriptions add column if not exists approved_by uuid references a
 alter table subscriptions add column if not exists approval_request_id uuid;
 alter table subscriptions add column if not exists billing_cycle_months integer not null default 1 check (billing_cycle_months between 1 and 24);
 create table if not exists billing_upgrade_requests (
- id uuid primary key default gen_random_uuid(), organization_id uuid not null references organizations(id) on delete cascade,
+ id uuid primary key default gen_random_uuid(), reference_code text not null default ('TV-' || upper(substr(replace(gen_random_uuid()::text,'-',''),1,8))) unique, organization_id uuid not null references organizations(id) on delete cascade,
  requested_by uuid not null references app_users(id) on delete restrict,
  requested_plan text not null check (requested_plan in ('starter','pro','business','enterprise')),
  amount_minor bigint check (amount_minor is null or amount_minor>=0), currency char(3) not null default 'NGN',

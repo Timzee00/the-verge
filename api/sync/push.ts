@@ -1,3 +1,4 @@
+import { assertPlanCapacity } from '../_plans';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { db, transactionPool } from '../_db';
 import { json, method, requireSameOrigin, requireUser } from '../_http';
@@ -161,6 +162,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await audit(pool,organizationId,user.id,'inventory_event.created','inventory_event',p.id,{type:p.type,locationId:p.locationId,productId:p.productId,quantityDelta:p.quantityDelta});
         await change(pool,organizationId,'inventory_event',p.id);
       } else if (op.entity === 'product') {
+        await assertPlanCapacity(pool,organizationId,'products');
         if(p.id!==op.entityId || (p.organizationId&&p.organizationId!==organizationId) || typeof p.sku!=='string' || !p.sku.trim() || typeof p.name!=='string' || !p.name.trim() || typeof p.unit!=='string' || !p.unit.trim()) throw new Error('invalid_product');
         if(!hasSafeMinor(p.standardCostMinor)||!hasSafeMinor(p.retailPriceMinor) || (p.wholesalePriceMinor!=null&&!hasSafeMinor(p.wholesalePriceMinor)) || (p.minimumPriceMinor!=null&&!hasSafeMinor(p.minimumPriceMinor))) throw new Error('invalid_product');
         await pool.query(`insert into products (id,organization_id,sku,barcode,name,brand,category,unit,weight_value,weight_unit,image_url,standard_cost_minor,retail_price_minor,wholesale_price_minor,minimum_price_minor,reorder_level,active,track_batch,track_expiry,created_at,updated_at)

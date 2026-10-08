@@ -7,8 +7,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!method(req, res, ['POST'])) return;
   if (!requireSameOrigin(req,res)) return;
   try {
-    const readiness = await db()`select to_regclass('public.membership_locations') as membership_locations, to_regclass('public.sync_changes') as sync_changes, to_regclass('public.auth_rate_limits') as auth_rate_limits, to_regclass('public.inventory_balances') as inventory_balances`;
-    if (!readiness[0] || !readiness[0].membership_locations || !readiness[0].sync_changes || !readiness[0].auth_rate_limits || !readiness[0].inventory_balances) return json(res, 503, { error: 'server_not_ready' });
+    const readiness = await db()`select
+      to_regclass('public.membership_locations') as membership_locations,
+      to_regclass('public.sync_changes') as sync_changes,
+      to_regclass('public.auth_rate_limits') as auth_rate_limits,
+      to_regclass('public.inventory_balances') as inventory_balances,
+      to_regclass('public.password_reset_tokens') as password_reset_tokens,
+      (
+        select count(*)=6
+        from information_schema.columns
+        where table_schema='public' and table_name='locations'
+          and column_name in ('address','phone','email','receipt_name','receipt_footer','setup_completed_at')
+      ) as location_setup`;
+    const ready=readiness[0] as any;
+    if (!ready?.membership_locations || !ready?.sync_changes || !ready?.auth_rate_limits || !ready?.inventory_balances || !ready?.password_reset_tokens || !ready?.location_setup) return json(res, 503, { error: 'server_not_ready' });
     const email = cleanEmail(req.body?.email);
     const password = cleanPassword(req.body?.password);
     const ipHint = req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || 'unknown';
@@ -58,7 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     await db()`delete from auth_rate_limits where key_hash=${rateKey}`;
     setSessionCookie(res, token, 60 * 60 * 24 * 30, isHttps(req));
-    return json(res, 201, { user: { id: userId, email, displayName }, organization: { id: orgId, name: organizationName, industry }, location: { id: locationId, name: locationName } });
+    return json(res, 201, { user: { id: userId, email, displayName }, organization: { id: orgId, name: organizationName, industry }, location: { id: locationId, organizationId: orgId, name: locationName, type: 'branch', code: 'MAIN', active: true } });
   } catch (error: any) {
     const msg = String(error?.message ?? error); if (msg.includes('app_users_email_key')) return json(res,409,{error:'email_in_use'}); if (msg.includes('server_not_ready')) return json(res,503,{error:'server_not_ready'}); return json(res,400,{error:'invalid_registration'});
   }

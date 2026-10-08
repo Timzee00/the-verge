@@ -12,7 +12,8 @@ async function sendRawEmail(input:{from:string;to:string;subject:string;text:str
   subject:input.subject,
   ...(input.html?{htmlContent:input.html}:{textContent:input.text}),
   ...(input.replyTo?{replyTo:{email:input.replyTo}}:{}),
-  tags:['the-verge','transactional']
+  tags:['the-verge','transactional'],
+  headers:{'X-Verge-Source':'the-verge'}
 })});
  if(!response.ok)throw new Error(`brevo_email_${response.status}`);
  const data:any=await response.json().catch(()=>({}));return String(data?.messageId??'')||null;

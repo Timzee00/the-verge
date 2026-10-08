@@ -11,7 +11,7 @@ export async function appendInventoryEvent(event: InventoryEvent) {
   validateInventoryEvent(event);
   await localDB.transaction('rw', localDB.inventoryEvents, localDB.syncOperations, async () => {
     await localDB.inventoryEvents.put(event);
-    await localDB.syncOperations.put({ id:event.id, organizationId:event.organizationId, deviceId:event.deviceId, entity:'inventory_event', entityId:event.id, operation:'create', payload:event, createdAt:event.createdAt, attempts:0, state:'pending' });
+    await localDB.syncOperations.put({ id:event.id, organizationId:event.organizationId, deviceId:event.deviceId, localSequence:event.localSequence, entity:'inventory_event', entityId:event.id, operation:'create', payload:event, createdAt:event.createdAt, attempts:0, state:'pending' });
   });
 }
 

@@ -56,7 +56,7 @@ export interface SavingsGoal { id: ID; userId?: ID; name: string; targetMinor: n
 export interface Debt { id: ID; userId?: ID; direction: 'owed_to_me'|'i_owe'; name: string; principalMinor: number; paidMinor: number; dueDate?: ISODate; active: boolean; }
 
 export type PlanCode = 'free'|'starter'|'pro'|'business'|'enterprise';
-export type EntitlementCode = 'personal.finance'|'business.core'|'inventory.basic'|'inventory.advanced'|'pos'|'multi_location'|'advanced_accounting'|'api.read'|'api.write'|'webhooks'|'whatsapp'|'ai.basic'|'ai.business_insights'|'industry.modules'|'branding.remove';
+export type EntitlementCode = 'personal.finance'|'business.core'|'inventory.basic'|'inventory.advanced'|'pos'|'multi_location'|'advanced_accounting'|'api.read'|'api.write'|'webhooks'|'whatsapp'|'ai.basic'|'ai.business_insights'|'industry.modules'|'branding.remove'|'email.receipts'|'email.automation'|'email.marketing';
 export interface EntitlementGrant { id: ID; subjectId: ID; code: EntitlementCode; source: 'plan'|'promotion'|'manual'|'system'; startsAt: ISODate; expiresAt?: ISODate; active: boolean; reason?: string; }
 
 export type RoleCode = 'platform_owner'|'platform_admin'|'support'|'billing_admin'|'security_admin'|'business_owner'|'manager'|'cashier'|'inventory_staff'|'accountant'|'staff';

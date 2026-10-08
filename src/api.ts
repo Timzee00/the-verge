@@ -78,6 +78,13 @@ export const api={
     info:(organizationId:string)=>request<{tasks:string[];previewTasks:string[];configured:boolean;plan:string;used:number;limit:number;advanced:boolean}>(`/api/ai/assistant?organizationId=${encodeURIComponent(organizationId)}`),
     ask:(organizationId:string,question:string,locationId?:string)=>request<{answer:string;usage:{used:number;limit:number;plan:string};asOf:string}>('/api/ai/assistant',{method:'POST',body:JSON.stringify({organizationId,question,locationId})})
   },
+  notifications:{
+    get:(organizationId:string)=>request<{preferences:Array<{eventCode:string;enabled:boolean;digest:string}>}>(`/api/notifications?organizationId=${encodeURIComponent(organizationId)}`),
+    save:(organizationId:string,eventCode:string,enabled:boolean,digest:string)=>request<{ok:boolean}>('/api/notifications',{method:'POST',body:JSON.stringify({organizationId,eventCode,enabled,digest})})
+  },
+  communications:{
+    emailReceipt:(organizationId:string,saleId:string)=>request<{ok:boolean}>('/api/communications/receipt',{method:'POST',body:JSON.stringify({organizationId,saleId})})
+  },
   billing:{
     status:(organizationId:string)=>request<any>(`/api/billing?organizationId=${encodeURIComponent(organizationId)}`),
     requestUpgrade:(organizationId:string,plan:'starter'|'pro'|'business',months=1)=>request<any>('/api/billing',{method:'POST',body:JSON.stringify({organizationId,plan,months})})

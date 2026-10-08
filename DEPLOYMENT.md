@@ -16,7 +16,7 @@ Only server-side code may read `DATABASE_URL`.
 
 For self-service password recovery in Production also configure:
 - `APP_BASE_URL` — the canonical HTTPS origin, for example `https://app.example.com`
-- `RESEND_API_KEY` — server-only email provider credential
+- `BREVO_API_KEY` — server-only email provider credential
 - `AUTH_EMAIL_FROM` — verified sender identity used for account security emails
 
 The health endpoint reports `mailConfigured`; public onboarding should not be enabled until it is true.
@@ -150,8 +150,9 @@ Billing configuration also requires `PLATFORM_ADMIN_EMAILS`, `BILLING_BANK_NAME`
 ## Business email and notifications
 
 Configure:
-- `RESEND_API_KEY`
+- `BREVO_API_KEY`
 - `BUSINESS_EMAIL_FROM` for receipts, owner summaries and operational mail
+- `BREVO_SENDER_NAME` (optional; defaults to `THE VERGE by Timzee Corp`)
 - `AUTH_EMAIL_FROM` for account/security email
 - `MAIL_WORKER_SECRET` (or schedule endpoints behind an equivalent secret)
 

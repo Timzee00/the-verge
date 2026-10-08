@@ -1,0 +1,5 @@
+import type { VercelResponse } from '@vercel/node';
+import { json } from './_http';
+export function isPlatformAdminEmail(email:unknown){const allowed=String(process.env.PLATFORM_ADMIN_EMAILS??'').split(',').map(v=>v.trim().toLowerCase()).filter(Boolean);return allowed.includes(String(email??'').trim().toLowerCase());}
+export function requirePlatformAdmin(user:any,res:VercelResponse){if(!user||!isPlatformAdminEmail(user.email)){json(res,403,{error:'platform_admin_required'});return false;}return true;}
+export function billingBankDetails(){const bankName=String(process.env.BILLING_BANK_NAME??'').trim(),accountName=String(process.env.BILLING_ACCOUNT_NAME??'').trim(),accountNumber=String(process.env.BILLING_ACCOUNT_NUMBER??'').trim();return bankName&&accountName&&accountNumber?{bankName,accountName,accountNumber}:null;}

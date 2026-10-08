@@ -16,15 +16,15 @@ export async function enqueueCustomerEmail(input:{organizationId:string;customer
   return {queued:true,id:String((inserted[0] as any).id)};
 }
 
-export async function enqueueUserEmail(input:{organizationId:string;userId:string;templateCode:string;subject:string;payload:Record<string,unknown>;kind:'operational'|'security'}){
+export async function enqueueUserEmail(input:{organizationId:string;userId:string;templateCode:string;subject:string;payload:Record<string,unknown>;kind:'operational'|'security';dedupeKey?:string}){
   const sql=db();
   const rows=await sql`select u.email from app_users u join memberships m on m.user_id=u.id and m.organization_id=${input.organizationId} and m.active=true
     where u.id=${input.userId} and u.status='active' limit 1`;
   const user=rows[0] as any;if(!user?.email)return {queued:false,reason:'user_email_missing'};
-  const inserted=await sql`insert into outbound_messages(organization_id,user_id,channel,message_kind,template_code,recipient,subject,payload)
-    values(${input.organizationId},${input.userId},'email',${input.kind},${input.templateCode},${String(user.email)},${input.subject},${JSON.stringify(input.payload)}::jsonb)
-    returning id`;
-  return {queued:true,id:String((inserted[0] as any).id)};
+  const inserted=await sql`insert into outbound_messages(organization_id,user_id,channel,message_kind,template_code,recipient,subject,payload,dedupe_key)
+    values(${input.organizationId},${input.userId},'email',${input.kind},${input.templateCode},${String(user.email)},${input.subject},${JSON.stringify(input.payload)}::jsonb,${input.dedupeKey??null})
+    on conflict (organization_id,dedupe_key) where dedupe_key is not null do nothing returning id`;
+  return inserted.length?{queued:true,id:String((inserted[0] as any).id)}:{queued:false,reason:'duplicate'};
 }
 
 function render(template:string,payload:any){

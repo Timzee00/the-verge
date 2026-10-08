@@ -53,7 +53,7 @@ async function request<T>(path:string, init:RequestInit={}):Promise<T>{
 }
 
 export type SessionOrg={id:string;name:string;base_currency:string;industry?:string;role:string};
-export type SessionPayload={user:{id:string;email:string;displayName?:string;emailVerified:boolean};organizations:SessionOrg[];locations:Location[]};
+export type SessionPayload={user:{id:string;email:string;displayName?:string;emailVerified:boolean};organizations:SessionOrg[];locations:Location[];isPlatformAdmin?:boolean};
 export const api={
   me:()=>request<SessionPayload>('/api/auth/me'),
   login:(body:{email:string;password:string})=>request<{user:{id:string;email:string;displayName?:string}}>('/api/auth/login',{method:'POST',body:JSON.stringify(body)}),
@@ -66,6 +66,14 @@ export const api={
     list:(organizationId:string)=>request<{keys:Array<{id:string;name:string;keyPrefix:string;scopes:string[];createdAt:string;expiresAt?:string|null;revokedAt?:string|null;lastUsedAt?:string|null}>}>(`/api/keys?organizationId=${encodeURIComponent(organizationId)}`),
     create:(organizationId:string,body:{name:string;scopes:string[];expiresAt?:string|null})=>request<{key:{id:string;name:string;keyPrefix:string;scopes:string[];expiresAt?:string|null;secret:string}}>(`/api/keys?organizationId=${encodeURIComponent(organizationId)}`,{method:'POST',body:JSON.stringify(body)}),
     revoke:(organizationId:string,keyId:string)=>request<{ok:boolean}>(`/api/keys?organizationId=${encodeURIComponent(organizationId)}&keyId=${encodeURIComponent(keyId)}`,{method:'DELETE'}),
+  },
+  billing:{
+    status:(organizationId:string)=>request<any>(`/api/billing?organizationId=${encodeURIComponent(organizationId)}`),
+    requestUpgrade:(organizationId:string,plan:'starter'|'pro'|'business',months=1)=>request<any>('/api/billing',{method:'POST',body:JSON.stringify({organizationId,plan,months})})
+  },
+  adminBilling:{
+    list:()=>request<{requests:any[]}>('/api/admin/billing'),
+    decide:(requestId:string,decision:'approve'|'reject')=>request<any>('/api/admin/billing',{method:'POST',body:JSON.stringify({requestId,decision})})
   },
   business:{
     updateProfile:(organizationId:string,body:{name:string;industry:string})=>request<{organization:SessionOrg}>('/api/business/setup',{method:'POST',body:JSON.stringify({action:'update_business',organizationId,...body})}),

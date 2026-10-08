@@ -21,6 +21,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   const isoDay=new Date().getUTCDay();
   for(const pref of prefs as any[]){
     const event=String(pref.event_code),plan=String(pref.plan);
+    const branding=await sql`select 1 from entitlements where organization_id=${pref.organization_id} and capability='branding.remove' and effect='allow' and starts_at<=now() and (expires_at is null or expires_at>now()) limit 1`;
     if(plan==='free'&&event!=='security.account'){skipped++;continue;}
     if(event==='owner.weekly_summary'&&isoDay!==1){skipped++;continue;}
     if(!['owner.daily_summary','owner.weekly_summary','inventory.low_stock','inventory.expiry'].includes(event)){skipped++;continue;}
@@ -45,7 +46,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
       subject=`${pref.business_name} — expiry alert`;
     }
     const period=event==='owner.weekly_summary'?today.slice(0,7)+'-w':today;
-    const result=await enqueueUserEmail({organizationId:String(pref.organization_id),userId:String(pref.user_id),templateCode:'owner_digest',subject,payload:{businessName:String(pref.business_name),text},kind:'operational',dedupeKey:`${event}:${pref.user_id}:${period}`});
+    const result=await enqueueUserEmail({organizationId:String(pref.organization_id),userId:String(pref.user_id),templateCode:'owner_digest',subject,payload:{businessName:String(pref.business_name),text,showPlatformBranding:!branding.length},kind:'operational',dedupeKey:`${event}:${pref.user_id}:${period}`});
     if(result.queued)queued++;else skipped++;
   }
   const delivered=await processEmailQueue(50);

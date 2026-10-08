@@ -22,6 +22,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
       to_regclass('public.ai_insights') as ai_insights,
       to_regclass('public.outbound_messages') as outbound_messages,
       to_regclass('public.notification_preferences') as notification_preferences,
+      to_regclass('public.email_delivery_events') as email_delivery_events,
       to_regclass('public.email_verification_tokens') as email_verification_tokens,
       (
         select count(*)=6
@@ -35,8 +36,9 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
     const ready=missing.length===0;
     const mailConfigured=Boolean(process.env.BREVO_API_KEY&&process.env.AUTH_EMAIL_FROM&&process.env.APP_BASE_URL);
     const businessMailConfigured=Boolean(process.env.BREVO_API_KEY&&process.env.BUSINESS_EMAIL_FROM);
-    const notificationReady=Boolean(row.outbound_messages&&row.notification_preferences);
-    return json(res,ready?200:503,{service:'the-verge',status:ready?'ok':'degraded',database:'connected',schemaReady:ready,mailConfigured,businessMailConfigured,notificationReady,missing});
+    const notificationReady=Boolean(row.outbound_messages&&row.notification_preferences&&row.email_delivery_events);
+    const brevoWebhookConfigured=Boolean(process.env.BREVO_WEBHOOK_SECRET);
+    return json(res,ready?200:503,{service:'the-verge',status:ready?'ok':'degraded',database:'connected',schemaReady:ready,mailConfigured,businessMailConfigured,notificationReady,brevoWebhookConfigured,missing});
   }catch{
     return json(res,503,{service:'the-verge',status:'degraded',database:'unavailable',schemaReady:false});
   }

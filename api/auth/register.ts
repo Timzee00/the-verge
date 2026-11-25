@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { transactionPool } from '../_db';
-import { cleanEmail, cleanText, cleanPassword, isHttps, json, method, newToken, hashToken, setSessionCookie } from '../_http';
-import { hashPassword } from '../_password';
+import { transactionPool } from '../_db.js';
+import { cleanEmail, cleanText, cleanPassword, isHttps, json, method, newToken, hashToken, setSessionCookie } from '../_http.js';
+import { hashPassword } from '../_password.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!method(req, res, ['POST'])) return;

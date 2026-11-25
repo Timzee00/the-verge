@@ -23,7 +23,8 @@
     "@vitejs/plugin-react": "^4.7.0",
     "typescript": "^5.9.2",
     "vite": "^7.1.4",
-    "@vercel/node": "^5.3.24"
+    "@vercel/node": "^5.3.24",
+    "@types/node": "^24.19.2"
   },
   "engines": {
     "node": "24.x"

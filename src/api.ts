@@ -14,6 +14,8 @@ export const api={
   login:(body:{email:string;password:string})=>request<{user:{id:string;email:string;displayName?:string}}>('/api/auth/login',{method:'POST',body:JSON.stringify(body)}),
   register:(body:{email:string;password:string;displayName:string;organizationName:string;industry:string;locationName:string})=>request<{user:{id:string;email:string;displayName:string};organization:{id:string;name:string;industry:string};location:{id:string;name:string}}>('/api/auth/register',{method:'POST',body:JSON.stringify(body)}),
   logout:()=>request<{ok:boolean}>('/api/auth/logout',{method:'POST'}),
+  forgotPassword:(body:{email:string})=>request<{message:string}>('/api/auth/forgot-password',{method:'POST',body:JSON.stringify(body)}),
+  resetPassword:(body:{token:string;password:string})=>request<{ok:boolean;message:string}>('/api/auth/reset-password',{method:'POST',body:JSON.stringify(body)}),
   push:(organizationId:string,operations:unknown[])=>request<{results:Array<{id:string;ok:boolean;conflict?:boolean;error?:string;rejected?:boolean;deduplicated?:boolean}>}>('/api/sync/push',{method:'POST',body:JSON.stringify({organizationId,operations})}),
   pull:(organizationId:string,since:string)=>request<{products:Product[];locations:Location[];inventoryEvents:InventoryEvent[];sales:any[];serverTime:string}>(`/api/sync/pull?organizationId=${encodeURIComponent(organizationId)}&since=${encodeURIComponent(since)}`)
 };

@@ -49,7 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
     if (!response.ok) {
       console.error('[auth.forgot-password] email provider rejected request', { status: response.status });
-      return json(res, 503, { message: 'Password recovery is temporarily unavailable. Try again later.' });
+      return json(res, 200, generic);
     }
     return json(res, 200, generic);
   } catch (error: any) {

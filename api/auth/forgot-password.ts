@@ -15,6 +15,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const ip = String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() || '0.0.0.0';
   const sql = db();
   try {
+    if (!process.env.BREVO_API_KEY || !process.env.BREVO_SENDER_EMAIL || !process.env.APP_BASE_URL) {
+      console.error('[auth.forgot-password] email delivery is not configured');
+      return json(res, 503, { message: 'Password recovery is temporarily unavailable. Contact your workspace administrator.' });
+    }
+
     const emailHash = digest(email);
     const ipHash = digest(ip);
     const limits = await sql`

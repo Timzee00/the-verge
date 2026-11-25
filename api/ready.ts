@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { db } from './_db';
-import { json, method } from './_http';
+import { db } from './_db.js';
+import { json, method } from './_http.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!method(req, res, ['GET'])) return;

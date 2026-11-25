@@ -33,6 +33,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     setSessionCookie(res, token, 60 * 60 * 24 * 30, isHttps(req));
     return json(res, 201, { user: { id: userId, email, displayName }, organization: { id: orgId, name: organizationName, industry }, location: { id: locationId, name: locationName } });
   } catch (error: any) {
-    const msg = String(error?.message ?? error); if (msg.includes('app_users_email_key')) return json(res,409,{error:'email_in_use'}); return json(res,400,{error:msg});
+    const msg = String(error?.message ?? error);
+    if (msg.includes('app_users_email_key')) return json(res, 409, { error: 'email_in_use' });
+    if (['Invalid email address', 'Password must be at least 10 characters', 'Password is too long', 'Invalid text value'].includes(msg)) return json(res, 400, { error: msg });
+    console.error('[auth.register] request failed', { name: error?.name, code: error?.code });
+    return json(res, 500, { error: 'registration_failed' });
   }
 }

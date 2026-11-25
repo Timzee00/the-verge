@@ -127,3 +127,6 @@ body[data-theme="dark"] .auth-form input,body[data-theme="dark"] .auth-form sele
 .scanner-view video{width:100%;height:100%;object-fit:cover}
 .scanner-guide{position:absolute;left:12%;right:12%;top:34%;height:32%;border:2px solid rgba(100,190,255,.95);border-radius:12px;box-shadow:0 0 0 999px rgba(0,0,0,.18);pointer-events:none}
 @media(max-width:600px){.inventory-tool-actions>*{flex:1 1 100%;justify-content:center}.barcode-quick-action{align-items:stretch;flex-direction:column}.scanner-card{padding:16px}}
+
+.auth-notice{margin:12px 0;padding:11px 13px;border-radius:12px;background:rgba(28,164,104,.10);border:1px solid rgba(28,164,104,.26);color:#167a50;font-size:13px;line-height:1.5}
+body[data-theme="dark"] .auth-notice{color:#8fe0b8;background:rgba(28,164,104,.12);border-color:rgba(88,210,151,.24)}

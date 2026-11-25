@@ -15,7 +15,9 @@
     "dexie": "^4.2.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "@neondatabase/serverless": "^1.0.1"
+    "@neondatabase/serverless": "^1.0.1",
+    "@zxing/browser": "^0.1.5",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",

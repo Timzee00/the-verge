@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { db, transactionPool } from '../_db';
-import { json, method, requireUser } from '../_http';
+import { db, transactionPool } from '../_db.js';
+import { json, method, requireUser } from '../_http.js';
 
 const ALLOWED = new Set(['inventory_event', 'product', 'customer', 'sale', 'expense']);
 const WRITE_ROLES = new Set(['business_owner', 'platform_admin', 'manager', 'cashier', 'inventory_staff', 'accountant']);

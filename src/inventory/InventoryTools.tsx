@@ -107,7 +107,8 @@ export default function InventoryTools({products,organizationId,locationId,devic
         seenSku.add(sku.toLowerCase()); if(barcode)seenBarcode.add(barcode);
         return {row:index+2,name,sku,barcode,brand:textValue(get('brand'))||undefined,category:textValue(get('category'))||undefined,unit:textValue(get('unit'))||'piece',costMinor:cost,sellMinor:sell,quantity,reorderLevel:reorder,errors};
       }).filter(row=>row.name||row.sku||row.barcode||row.quantity>0);
-      if(!parsed.length)throw new Error('No product rows were found below the header.');\n      if(parsed.length>5000)throw new Error('This import contains more than 5,000 product rows. Split it into smaller files.');
+      if(!parsed.length)throw new Error('No product rows were found below the header.');
+      if(parsed.length>5000)throw new Error('This import contains more than 5,000 product rows. Split it into smaller files.');
       setRows(parsed);
     } catch (err) { setError(err instanceof Error?err.message:'Could not read this file.'); }
   }

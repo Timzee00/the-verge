@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { db } from './_db';
+import { db } from './_db.js';
 
 export const json = (res: VercelResponse, status: number, body: unknown) => {
   res.status(status).setHeader('Content-Type', 'application/json').json(body);

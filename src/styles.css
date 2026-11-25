@@ -130,3 +130,42 @@ body[data-theme="dark"] .auth-form input,body[data-theme="dark"] .auth-form sele
 
 .auth-notice{margin:12px 0;padding:11px 13px;border-radius:12px;background:rgba(28,164,104,.10);border:1px solid rgba(28,164,104,.26);color:#167a50;font-size:13px;line-height:1.5}
 body[data-theme="dark"] .auth-notice{color:#8fe0b8;background:rgba(28,164,104,.12);border-color:rgba(88,210,151,.24)}
+
+/* Task-first navigation and large catalogue ergonomics */
+.workspace label{display:grid;gap:6px;margin-bottom:9px}
+.workspace label span{font-size:10px;letter-spacing:.1em;font-weight:800;color:var(--muted)}
+.workspace select{width:100%;min-width:0;padding:8px 9px;border-radius:9px;border:1px solid var(--line);background:var(--glass-strong);color:var(--text);font:inherit;font-size:12px}
+.workspace select:disabled{opacity:1;cursor:default}
+.workspace small{font-size:10px}
+.catalogue-panel{padding:18px}
+.catalogue-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) minmax(145px,190px) minmax(145px,180px);gap:10px;align-items:center}
+.catalogue-search{display:flex;align-items:center;gap:9px;min-width:0;padding:0 12px;min-height:44px;border:1px solid var(--line);border-radius:11px;background:var(--glass-strong);color:var(--muted)}
+.catalogue-search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:var(--text);font:inherit;font-size:13px}
+.catalogue-toolbar select{min-width:0;min-height:44px;padding:0 10px;border:1px solid var(--line);border-radius:11px;background:var(--glass-strong);color:var(--text);font:inherit;font-size:12px}
+.catalogue-meta,.catalogue-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--muted);font-size:12px}
+.catalogue-meta{padding:16px 2px 10px}
+.catalogue-table-wrap{width:100%;overflow:auto;border:1px solid var(--line);border-radius:13px}
+.catalogue-table{width:100%;border-collapse:separate;border-spacing:0;min-width:720px;font-size:13px}
+.catalogue-table th{position:sticky;top:0;z-index:1;text-align:left;padding:12px;background:var(--glass-strong);color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid var(--line)}
+.catalogue-table td{padding:12px;border-bottom:1px solid var(--line);color:var(--text);vertical-align:middle}
+.catalogue-table tbody tr:last-child td{border-bottom:0}
+.catalogue-table tbody tr:hover{background:var(--accent-soft)}
+.catalogue-table td strong,.catalogue-table td small{display:block}
+.catalogue-table td small{margin-top:4px;color:var(--muted);font-size:11px}
+.compact{min-height:34px;padding:7px 11px;font-size:12px}
+.catalogue-footer{padding-top:14px}
+.catalogue-footer>div{display:flex;gap:8px}
+.catalogue-empty{min-height:190px;display:grid;place-content:center;justify-items:center;gap:9px;text-align:center;color:var(--muted)}
+.catalogue-empty .icon{width:28px;height:28px;opacity:.65}
+.catalogue-empty strong{color:var(--text);font-size:15px}
+.catalogue-empty span{font-size:12px}
+.muted-chip{opacity:.7}
+.pos-search{margin-bottom:12px}
+.pos-results-meta{font-size:12px;color:var(--muted);margin-bottom:14px}
+.sales-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+.sale-card{min-width:0}
+.sale-card h3{overflow-wrap:anywhere}
+.topbar .search{border:1px solid var(--line);background:var(--glass-strong);border-radius:12px;padding:0 12px;min-height:42px}
+.topbar .search input{color:var(--text)}
+@media(max-width:1000px){.catalogue-toolbar{grid-template-columns:1fr 1fr}.catalogue-toolbar .catalogue-search{grid-column:1/-1}.sales-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:680px){.catalogue-toolbar{grid-template-columns:1fr}.catalogue-toolbar .catalogue-search{grid-column:auto}.catalogue-meta{align-items:flex-start;flex-direction:column;gap:4px}.catalogue-footer{align-items:flex-start;flex-direction:column}.catalogue-footer>div{width:100%}.catalogue-footer button{flex:1}.sales-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.topbar .search{max-width:none}.workspace{padding:10px}.workspace select{font-size:11px}}

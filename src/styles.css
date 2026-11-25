@@ -99,3 +99,31 @@ body[data-theme="dark"] .auth-form input,body[data-theme="dark"] .auth-form sele
 .field-hint{display:block;color:var(--muted);font-size:12px;margin-top:-8px}
 .theme-toggle{border:1px solid var(--line);background:var(--glass-strong);box-shadow:0 10px 26px rgba(38,60,100,.12),inset 0 1px 0 rgba(255,255,255,.8)}
 @media(max-width:760px){.auth-shell{padding:74px 16px 24px}.auth-card{padding:23px 19px;border-radius:23px}.auth-card .brand{padding-bottom:22px}.auth-form .primary{min-height:52px}}
+
+/* Inventory data tools and live barcode camera */
+.inventory-tools{display:grid;gap:16px}
+.inventory-tool-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.file-picker{position:relative;overflow:hidden;display:inline-flex;align-items:center;cursor:pointer}
+.file-picker input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.import-review{display:grid;gap:12px;padding-top:12px;border-top:1px solid var(--line-strong)}
+.import-summary{display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:13px}
+.import-summary strong{color:#16845b}
+.table-scroll{max-width:100%;overflow:auto;border:1px solid var(--line-strong);border-radius:12px}
+.data-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
+.data-table th,.data-table td{padding:10px 12px;border-bottom:1px solid var(--line-strong);text-align:left}
+.data-table th{position:sticky;top:0;background:var(--glass-strong);color:var(--text);font-weight:700}
+.data-table td{color:var(--muted)}
+.barcode-quick-action{display:flex;justify-content:space-between;align-items:center;gap:14px;padding-top:14px;border-top:1px solid var(--line-strong)}
+.barcode-quick-action>div{display:grid;gap:4px}
+.barcode-quick-action small{color:var(--muted);line-height:1.5}
+.password-label{display:grid;gap:8px}
+.password-control{position:relative;display:block}
+.password-control input{width:100%;padding-right:68px!important}
+.password-toggle{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--accent-strong);font-size:12px;font-weight:700;padding:8px;cursor:pointer}
+.forgot-link{display:block;margin:8px 0 0 auto}
+.scanner-backdrop{z-index:30}
+.scanner-card{width:min(560px,100%);max-height:calc(100dvh - 32px);overflow:auto;padding:22px;border-radius:22px;background:var(--glass-strong);border:1px solid var(--line-strong);box-shadow:0 28px 80px rgba(0,0,0,.28);backdrop-filter:blur(28px)}
+.scanner-view{position:relative;overflow:hidden;aspect-ratio:4/3;background:#050a12;border-radius:16px;margin:16px 0}
+.scanner-view video{width:100%;height:100%;object-fit:cover}
+.scanner-guide{position:absolute;left:12%;right:12%;top:34%;height:32%;border:2px solid rgba(100,190,255,.95);border-radius:12px;box-shadow:0 0 0 999px rgba(0,0,0,.18);pointer-events:none}
+@media(max-width:600px){.inventory-tool-actions>*{flex:1 1 100%;justify-content:center}.barcode-quick-action{align-items:stretch;flex-direction:column}.scanner-card{padding:16px}}

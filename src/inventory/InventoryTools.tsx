@@ -30,7 +30,8 @@ const aliases: Record<string, string[]> = {
   reorder: ['reorder level','minimum stock','low stock threshold']
 };
 const key = (value: unknown) => String(value ?? '').trim().toLowerCase().replace(/[_-]+/g,' ').replace(/\s+/g,' ');
-const moneyMinor = (value: unknown) => Math.round(Number(value ?? 0) * 100);
+const numericValue = (value: unknown) => typeof value === 'number' ? value : Number(String(value ?? '').replace(/[₦$£€,\s]/g,'').replace(/[^0-9.-]/g,''));
+const moneyMinor = (value: unknown) => Math.round(numericValue(value) * 100);
 const textValue = (value: unknown) => String(value ?? '').trim();
 
 function mapHeaders(headers: string[]) {
@@ -74,6 +75,7 @@ export default function InventoryTools({products,organizationId,locationId,devic
 
   async function readFile(file?: File) {
     if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { setError('Files must be 10 MB or smaller.'); return; }
     setError(''); setRows([]); setFileName(file.name);
     if (!/\.(xlsx|xls|csv)$/i.test(file.name)) { setError('Choose an Excel (.xlsx/.xls) or CSV file.'); return; }
     try {
@@ -91,8 +93,8 @@ export default function InventoryTools({products,organizationId,locationId,devic
         const get=(field:string)=>mapping[field]===undefined?'':cells[mapping[field]!];
         const name=textValue(get('name')); const sku=textValue(get('sku')) || `IMP-${Date.now().toString(36).toUpperCase()}-${index+1}`;
         const barcode=textValue(get('barcode')) || undefined;
-        const cost=moneyMinor(get('cost')); const sell=moneyMinor(get('sell')); const quantity=Number(get('quantity')||0);
-        const reorderRaw=get('reorder'); const reorder=reorderRaw===''?undefined:Number(reorderRaw);
+        const cost=moneyMinor(get('cost')); const sell=moneyMinor(get('sell')); const quantity=numericValue(get('quantity')||0);
+        const reorderRaw=get('reorder'); const reorder=reorderRaw===''?undefined:numericValue(reorderRaw);
         const errors:string[]=[];
         if(!name)errors.push('Product name is missing');
         if(cost<0||!Number.isSafeInteger(cost))errors.push('Cost price must be a valid non-negative amount');
@@ -100,6 +102,7 @@ export default function InventoryTools({products,organizationId,locationId,devic
         if(!Number.isFinite(quantity)||quantity<0)errors.push('Opening stock must be zero or greater');
         if(reorder!==undefined&&(!Number.isFinite(reorder)||reorder<0))errors.push('Reorder level must be zero or greater');
         if(products.some(p=>p.sku.toLowerCase()===sku.toLowerCase())||seenSku.has(sku.toLowerCase()))errors.push('Duplicate SKU');
+        if(typeof get('barcode')==='number')errors.push('Barcode is numeric in the spreadsheet. Format this column as Text to preserve leading zeros.');
         if(barcode&&(products.some(p=>p.barcode===barcode)||seenBarcode.has(barcode)))errors.push('Duplicate barcode');
         seenSku.add(sku.toLowerCase()); if(barcode)seenBarcode.add(barcode);
         return {row:index+2,name,sku,barcode,brand:textValue(get('brand'))||undefined,category:textValue(get('category'))||undefined,unit:textValue(get('unit'))||'piece',costMinor:cost,sellMinor:sell,quantity,reorderLevel:reorder,errors};

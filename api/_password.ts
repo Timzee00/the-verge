@@ -5,7 +5,7 @@ const KEYLEN = 32;
 const DIGEST = 'sha256';
 
 function derive(password: string, salt: Uint8Array, iterations: number) {
-  return new Promise<any>((resolve, reject) => {
+  return new Promise<Buffer>((resolve, reject) => {
     pbkdf2(password, salt, iterations, KEYLEN, DIGEST, (error, derived) => {
       if (error) reject(error);
       else resolve(derived);

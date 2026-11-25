@@ -1,9 +1,8 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
-const BarcodeScanner = lazy(() => import('./BarcodeScanner'));
 import { localDB } from '../db/local';
 import { getLocalStock } from './ledger';
 import type { InventoryEvent, Product, SyncOperation } from '../core/types';
-import BarcodeScanner from './BarcodeScanner';
+const BarcodeScanner = lazy(() => import('./BarcodeScanner'));
 
 type Props = {
   products: Product[];

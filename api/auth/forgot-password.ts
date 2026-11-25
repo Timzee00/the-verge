@@ -31,10 +31,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const users = await sql`select id, email from app_users where email = ${email} and status = 'active' limit 1`;
     if (!users.length) return json(res, 200, generic);
-    if (!process.env.BREVO_API_KEY || !process.env.BREVO_SENDER_EMAIL || !process.env.APP_BASE_URL) {
-      console.error('[auth.forgot-password] email delivery is not configured');
-      return json(res, 503, { message: 'Password recovery is temporarily unavailable. Contact your workspace administrator.' });
-    }
 
     const token = newToken();
     await sql`update password_reset_tokens set used_at = now() where user_id = ${users[0].id} and used_at is null`;

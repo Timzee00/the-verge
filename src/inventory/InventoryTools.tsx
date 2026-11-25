@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import * as XLSX from 'xlsx';
+import { lazy, Suspense, useMemo, useState } from 'react';
+const BarcodeScanner = lazy(() => import('./BarcodeScanner'));
 import { localDB } from '../db/local';
 import { getLocalStock } from './ledger';
 import type { InventoryEvent, Product, SyncOperation } from '../core/types';
@@ -43,7 +43,8 @@ function mapHeaders(headers: string[]) {
   return mapped;
 }
 
-function makeTemplate() {
+async function makeTemplate() {
+  const XLSX = await import('xlsx');
   const sample = [{ 'Product Name':'Sample product', SKU:'SKU-001', Barcode:'0123456789012', Brand:'Example brand', Category:'General', Unit:'piece', 'Cost Price':1500, 'Selling Price':2000, 'Opening Stock':10, 'Reorder Level':3 }];
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(sample), 'Products');
@@ -61,6 +62,7 @@ export default function InventoryTools({products,organizationId,locationId,devic
 
   async function exportProducts() {
     try {
+      const XLSX = await import('xlsx');
       const stock = await Promise.all(products.map(product => getLocalStock(locationId,product.id)));
       const records = products.map((p,index)=>({
         'Product Name':p.name,SKU:p.sku,Barcode:p.barcode??'',Brand:p.brand??'',Category:p.category??'',Unit:p.unit,
@@ -79,6 +81,7 @@ export default function InventoryTools({products,organizationId,locationId,devic
     setError(''); setRows([]); setFileName(file.name);
     if (!/\.(xlsx|xls|csv)$/i.test(file.name)) { setError('Choose an Excel (.xlsx/.xls) or CSV file.'); return; }
     try {
+      const XLSX = await import('xlsx');
       const bytes = await file.arrayBuffer();
       const workbook = XLSX.read(bytes,{type:'array',cellDates:false});
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -158,6 +161,6 @@ export default function InventoryTools({products,organizationId,locationId,devic
       <div className="form-actions"><button type="button" className="primary" disabled={!validRows.length||busy} onClick={()=>void importRows()}>{busy?'Importing…':`Import ${validRows.length} valid products`}</button><button type="button" className="text-btn" onClick={()=>{setRows([]);setFileName('');}}>Cancel</button></div>
     </div>}
     <div className="barcode-quick-action"><div><strong>Barcode scanner</strong><small>Use your device camera, or connect a USB/Bluetooth scanner and scan into the barcode field above.</small></div><button type="button" className="secondary" onClick={()=>setScannerOpen(true)}>Open camera scanner</button></div>
-    {scannerOpen&&<BarcodeScanner onDetected={value=>{onBarcode(value);setScannerOpen(false);notify('Barcode captured.');}} onClose={()=>setScannerOpen(false)}/>}
+    {scannerOpen&&<Suspense fallback={<div className="scanner-card">Loading camera scanner…</div>}><BarcodeScanner onDetected={value=>{onBarcode(value);setScannerOpen(false);notify('Barcode captured.');}} onClose={()=>setScannerOpen(false)}/></Suspense>}
   </section>;
 }

@@ -80,7 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (!customer.rowCount) throw new Error('customer_ownership_check_failed');
         }
         await pool.query(`insert into sales (id,organization_id,location_id,customer_id,subtotal_minor,discount_minor,total_minor,payment_method,status,below_cost,discount_reason,occurred_at,device_id,local_sequence,created_at,created_by)
-          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) on conflict (id) do nothing`, [sale.id,organizationId,sale.locationId,sale.customerId??null,sale.subtotalMinor,sale.discountMinor,sale.totalMinor,sale.paymentMethod,sale.status,sale.belowCost,sale.discountReason??null,sale.occurredAt,sale.deviceId,sale.localSequence,sale.createdAt,user.id]);
+          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,now(),$15) on conflict (id) do nothing`, [sale.id,organizationId,sale.locationId,sale.customerId??null,sale.subtotalMinor,sale.discountMinor,sale.totalMinor,sale.paymentMethod,sale.status,sale.belowCost,sale.discountReason??null,sale.occurredAt,sale.deviceId,sale.localSequence,user.id]);
         const embeddedEvents = Array.isArray(p.inventoryEvents) ? p.inventoryEvents : (p.inventoryEvent ? [p.inventoryEvent] : []);
         for (let index = 0; index < items.length; index++) {
           const item = items[index];

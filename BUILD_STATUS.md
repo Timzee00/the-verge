@@ -2,7 +2,8 @@
 **Snapshot:** 27 November 2026  
 **Repository:** `Timzee00/the-verge`  
 **Branch:** `main`  
-**Latest reviewed commit:** `e88cca8e88916e0bc7a644056303e2ebf6fae622`
+**Repository HEAD:** `094fe55752ec25b90d75db5bd79d6ebf915dead0` (QA/build documentation update)  
+**Latest reviewed application-code commit:** `e88cca8e88916e0bc7a644056303e2ebf6fae622`
 
 ## Current verified state
 
@@ -24,7 +25,8 @@ The current main branch contains the following working-code foundations:
 - Vercel built commit `aa5b6f68128b983eacbd5973e0a4f90ed91b6c2c` using `tsc -b && vite build`; the captured log showed Vite completing successfully with no TypeScript diagnostics.
 - That build followed the fix to the API import path for the shared inventory movement validator.
 - Subsequent commits changed the expense index migration, selected-location summaries, and atomic sequence allocation in inventory receipt/import flows.
-- A Vercel deployment for the latest reviewed commit `e88cca8e88916e0bc7a644056303e2ebf6fae622` was created but its deployment state had not yet reached a final ready state when this status was written.
+- Vercel deployed the current `main` HEAD `094fe55752ec25b90d75db5bd79d6ebf915dead0` successfully (`READY`). The build ran `tsc -b && vite build`, Vite completed in 3.85 seconds, and Vercel reported `Deployment completed`.
+- Live read-only checks: `/` returned HTTP 200; `/api/health` returned `ok`; `/api/ready` returned `ready` with `database: ok`.
 
 ## Tests not yet confirmed
 

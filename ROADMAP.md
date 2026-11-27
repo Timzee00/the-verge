@@ -35,3 +35,11 @@
 - Treat offline actions as pending until the server confirms them.
 - Never infer that a production migration or provider integration is active merely because code exists.
 - Do not market a vertical as pharmacy-grade or accounting-complete until its end-to-end controls are implemented and tested.
+
+
+## Final review addendum
+- Supplier balances and receipt-linked partial payments are now part of the committed code.
+- Opening product quantities are posted against owner equity.
+- Inventory staff receive stock only through purchase orders.
+- The new supplier-payment journal source is covered by migration 006.
+- Current main still awaits Preview migrations, CI execution, browser role testing and a fresh Vercel deployment.

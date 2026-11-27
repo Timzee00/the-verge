@@ -60,3 +60,17 @@
  .staff-admin-table { min-width:470px; }
  .staff-admin-table td,.staff-admin-table th { padding:9px 6px; }
 }
+
+
+.staff-admin-location-picker { display:grid; gap:8px; padding:11px; border:1px solid var(--line,#e1e8f0); border-radius:9px; background:#fbfcfe; }
+.staff-admin-location-picker > strong { display:flex; align-items:center; justify-content:space-between; color:var(--text,#304158); font-size:10px; }
+.staff-admin-location-picker > strong span { color:#a65b12; font-size:9px; font-weight:750; }
+.staff-admin-location-picker label,.staff-admin-assignment-menu label { display:flex!important; grid-template-columns:none!important; align-items:center; gap:8px!important; margin:0; color:#485c75!important; font-size:10px!important; font-weight:600!important; cursor:pointer; }
+.staff-admin-location-picker input[type=checkbox],.staff-admin-assignment-menu input[type=checkbox] { width:14px; height:14px; flex:none; accent-color:#1858bb; }
+.staff-admin-location-picker small { color:var(--muted,#65758b); font-size:9px; line-height:1.5; }
+.staff-admin-location-details { position:relative; min-width:125px; }
+.staff-admin-location-details summary { max-width:175px; overflow:hidden; padding:6px 8px; border:1px solid var(--line,#e1e8f0); border-radius:7px; background:#fff; color:#405875; cursor:pointer; font-size:9px; text-overflow:ellipsis; white-space:nowrap; list-style-position:inside; }
+.staff-admin-assignment-menu { position:absolute; z-index:20; top:calc(100% + 5px); left:0; min-width:195px; display:grid; gap:10px; padding:11px; border:1px solid var(--line,#dbe4ef); border-radius:10px; background:#fff; box-shadow:0 12px 32px rgba(20,37,64,.15); }
+.staff-admin-assignment-menu button { min-height:30px; border:0; border-radius:7px; background:#1858bb; color:#fff; font-size:10px; font-weight:800; cursor:pointer; }
+.staff-admin-assignment-menu button:disabled { opacity:.4; cursor:not-allowed; }
+.staff-admin-table { min-width:600px; }

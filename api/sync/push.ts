@@ -172,7 +172,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (!event || event.type !== 'sale' || event.locationId !== sale.locationId ||
             event.productId !== item.productId || Number(event.quantityDelta) !== -item.quantity ||
             (event.referenceId && event.referenceId !== sale.id) || event.deviceId !== op.deviceId ||
-            !Number.isInteger(event.localSequence) || event.localSequence < 0) {
+            !Number.isSafeInteger(event.localSequence) || event.localSequence <= 0) {
             throw new Error('invalid_sale_inventory_event');
           }
           validatedItems.push({ item, event, unitPriceMinor, unitCostMinor });

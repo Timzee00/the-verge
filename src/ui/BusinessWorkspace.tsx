@@ -97,7 +97,7 @@ export default function BusinessWorkspace({organizationId,organizationName,onBus
         state:draft.state,postalCode:draft.postalCode,
       };
       if(editingLocationId) {
-        await api.updateLocation({...payload,locationId:editingLocationId,action:'update'});
+        await api.updateLocation({...payload,code:draft.code.trim()||null,parentId:draft.parentId||null,locationId:editingLocationId,action:'update'});
         setNotice('Location details updated.');
       } else {
         await api.createLocation(payload);

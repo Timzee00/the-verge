@@ -63,7 +63,7 @@ export async function handleAccounting(req: VercelRequest, res: VercelResponse) 
   const balanceRows = !organizationWide && !locationIds.length ? [] : organizationWide
     ? await sql`
         select jl.account_id as "accountId", la.code as "accountCode", la.name as "accountName",
-               la.normal_balance as "normalBalance", la.account_class as class, je.location_id as "locationId",
+               la.normal_balance as "normalBalance", la.account_class as "class", je.location_id as "locationId",
                coalesce(sum(jl.debit_minor),0) as "debitMinor",
                coalesce(sum(jl.credit_minor),0) as "creditMinor"
         from journal_lines jl
@@ -75,7 +75,7 @@ export async function handleAccounting(req: VercelRequest, res: VercelResponse) 
       `
     : await sql`
         select jl.account_id as "accountId", la.code as "accountCode", la.name as "accountName",
-               la.normal_balance as "normalBalance", la.account_class as class, je.location_id as "locationId",
+               la.normal_balance as "normalBalance", la.account_class as "class", je.location_id as "locationId",
                coalesce(sum(jl.debit_minor),0) as "debitMinor",
                coalesce(sum(jl.credit_minor),0) as "creditMinor"
         from journal_lines jl

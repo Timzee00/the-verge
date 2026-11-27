@@ -87,7 +87,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const items = Array.isArray(p.items) ? p.items : (p.item ? [p.item] : []);
         const embeddedEvents = Array.isArray(p.inventoryEvents) ? p.inventoryEvents : (p.inventoryEvent ? [p.inventoryEvent] : []);
         if (!sale || !items.length || items.length > 100 || embeddedEvents.length !== items.length) throw new Error('invalid_sale_payload');
-        if (sale.organizationId !== organizationId || typeof sale.id !== 'string' || sale.status !== 'completed') throw new Error('invalid_sale_header');
+        if (sale.organizationId !== organizationId || typeof sale.id !== 'string' || sale.status !== 'completed' || sale.deviceId !== op.deviceId || sale.localSequence !== op.localSequence) throw new Error('invalid_sale_header');
         if (!['cash', 'bank', 'transfer', 'card', 'credit'].includes(String(sale.paymentMethod))) throw new Error('invalid_payment_method');
         if (sale.paymentMethod === 'credit' && !['business_owner', 'platform_admin', 'manager'].includes(role)) throw new Error('credit_sale_requires_manager');
         if (![sale.subtotalMinor, sale.discountMinor, sale.totalMinor].every(value => Number.isSafeInteger(Number(value)) && Number(value) >= 0)) throw new Error('invalid_sale_amount');
@@ -112,7 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (!Number.isSafeInteger(item.discountMinor) || item.discountMinor !== 0) throw new Error('discount_requires_approval_workflow');
 
           const productResult = await pool.query(
-            'select retail_price_minor,standard_cost_minor,active from products where id=$1 and organization_id=$2 limit 1',
+            'select retail_price_minor,standard_cost_minor,active from products where id=$1 and organization_id=$2 limit 1 for share',
             [item.productId, organizationId],
           );
           if (!productResult.rowCount || !productResult.rows[0].active) throw new Error('product_not_available');

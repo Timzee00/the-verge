@@ -284,6 +284,9 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
       const duplicate=await pool.query('select id,purchase_order_id from purchase_receipts where id=$1 limit 1',[receiptId]);
       if(duplicate.rowCount) {
         if(String(duplicate.rows[0].purchase_order_id)!==orderId)throw new Error('receipt_id_collision');
+        const priorLines=await pool.query('select purchase_order_item_id,quantity_received from purchase_receipt_items where purchase_receipt_id=$1',[receiptId]);
+        const priorMap=new Map<string,number>(priorLines.rows.map((row:any)=>[String(row.purchase_order_item_id),Number(row.quantity_received)]));
+        if(priorMap.size!==requested.size||[...requested.entries()].some(([itemId,quantity])=>priorMap.get(itemId)!==quantity))throw new Error('receipt_idempotency_payload_mismatch');
         await pool.query('COMMIT');
         return json(res,200,{receipt:{id:receiptId,deduplicated:true}});
       }
@@ -360,7 +363,7 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
     } catch(error:any) {
       await pool.query('ROLLBACK').catch(()=>undefined);
       const message=String(error?.message??error);
-      if(['purchase_order_not_found','location_access_denied','purchase_order_not_receivable','receipt_id_collision','invalid_receipt_item','invalid_received_quantity','receipt_item_not_in_order','received_quantity_exceeds_remaining','invalid_purchase_cost','purchase_receipt_cost_overflow','purchase_receipt_total_overflow'].includes(message))return json(res,400,{error:message});
+      if(['purchase_order_not_found','location_access_denied','purchase_order_not_receivable','receipt_id_collision','receipt_idempotency_payload_mismatch','invalid_receipt_item','invalid_received_quantity','receipt_item_not_in_order','received_quantity_exceeds_remaining','invalid_purchase_cost','purchase_receipt_cost_overflow','purchase_receipt_total_overflow'].includes(message))return json(res,400,{error:message});
       if(error?.code==='23505')return json(res,409,{error:'purchase_receipt_conflict'});
       console.error('[procurement.purchase_receipt]',{name:error?.name,code:error?.code});
       return json(res,500,{error:'purchase_receipt_failed'});
@@ -431,8 +434,22 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
       const transfer=result.rows[0];
       const relevantLocation=stage==='dispatch'?String(transfer.from_location_id):String(transfer.to_location_id);
       if(!hasLocationAccess(relevantLocation))throw new Error('location_access_denied');
-      if(stage==='dispatch'&&transfer.status!=='draft')throw new Error('transfer_not_dispatchable');
-      if(stage==='receive'&&transfer.status!=='dispatched')throw new Error('transfer_not_receivable');
+      if(stage==='dispatch'&&transfer.status!=='draft') {
+        const prior=await pool.query('select id from stock_transfer_events where transfer_id=$1 and action=\'dispatched\' limit 1',[transferId]);
+        if(prior.rowCount) {
+          await pool.query('COMMIT');
+          return json(res,200,{transfer:{id:transferId,status:transfer.status,deduplicated:true}});
+        }
+        throw new Error('transfer_not_dispatchable');
+      }
+      if(stage==='receive'&&transfer.status!=='dispatched') {
+        const prior=await pool.query('select id from stock_transfer_events where transfer_id=$1 and action=\'received\' limit 1',[transferId]);
+        if(prior.rowCount) {
+          await pool.query('COMMIT');
+          return json(res,200,{transfer:{id:transferId,status:transfer.status,deduplicated:true}});
+        }
+        throw new Error('transfer_not_receivable');
+      }
       const lines=await pool.query(
         `select sti.id,sti.product_id,sti.quantity,sti.unit_cost_minor,p.standard_cost_minor,p.active
          from stock_transfer_items sti join products p on p.id=sti.product_id

@@ -1,11 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import type { Customer, Location, ParkedCart, Product, Sale, SaleItem } from '../core/types';
+import type { Customer, Expense, Location, ParkedCart, Product, Sale, SaleItem } from '../core/types';
 import type { SessionOrg } from '../api';
 import { localDB } from '../db/local';
 import { getLocalStock } from '../inventory/ledger';
 import { calculateCartTotals } from '../domain/pos';
 import './staff-workspace.css';
 import InventoryStaffWorkspace from './InventoryStaffWorkspace';
+import AccountantWorkspace from './AccountantWorkspace';
 
 const BarcodeScanner = lazy(() => import('../inventory/BarcodeScanner'));
 type PaymentMethod = Sale['paymentMethod'];
@@ -17,6 +18,8 @@ type Props = {
   role: string;
   deviceId: string;
   onRefresh: () => Promise<void>;
+  expenses: Expense[];
+  onRecordExpense: (input:{amount:string;category:string;description:string;paymentMethod:Expense['paymentMethod']}) => Promise<Expense>;
   userId: string;
   userEmail: string;
   organizationId: string;
@@ -66,6 +69,7 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
 
 export default function StaffWorkspace(props: Props) {
   if (props.role === 'inventory_staff') return <InventoryStaffWorkspace {...props}/>;
+  if (props.role === 'accountant') return <AccountantWorkspace {...props}/>;
   if (props.role !== 'cashier') {
     return <div className="staff-shell">
       <header className="staff-header"><div className="staff-brand"><span className="staff-brand-mark">V</span><span><strong>THE VERGE</strong><small>Staff workspace</small></span></div><button className="staff-logout" onClick={() => void props.onLogout()}><Icon name="logout"/> Sign out</button></header>

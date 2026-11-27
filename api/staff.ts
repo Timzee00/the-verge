@@ -25,13 +25,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const sql = db();
     const staff = await sql`
       select m.user_id as "userId", u.email, u.display_name as "displayName",
-             m.role, m.active, m.created_at as "joinedAt"
+             m.role, m.active, m.created_at as "joinedAt",
+             coalesce(array_agg(ml.location_id) filter (where ml.location_id is not null), '{}') as "locationIds",
+             coalesce(array_agg(l.name order by l.name) filter (where l.name is not null), '{}') as "locationNames"
       from memberships m
       join app_users u on u.id=m.user_id
+      left join membership_locations ml on ml.organization_id=m.organization_id and ml.user_id=m.user_id
+      left join locations l on l.id=ml.location_id and l.organization_id=m.organization_id
       where m.organization_id=${organizationId} and m.role not in ('business_owner','platform_admin')
+      group by m.user_id,u.email,u.display_name,m.role,m.active,m.created_at
       order by m.active desc, u.display_name nulls last, u.email
     `;
-    return json(res, 200, { staff });
+    const locations = await sql`
+      select id,name,type from locations
+      where organization_id=${organizationId} and active=true
+      order by name
+    `;
+    return json(res, 200, { staff, locations });
   }
 
   const targetUserId = String(req.body?.userId ?? '');
@@ -43,7 +53,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try { email = cleanEmail(req.body?.email); }
       catch { await pool.query('ROLLBACK'); return json(res, 400, { error: 'invalid_email' }); }
       const role = String(req.body?.role ?? 'cashier');
+      const locationIds = Array.isArray(req.body?.locationIds) ? [...new Set(req.body.locationIds.map(String))] : [];
       if (!ASSIGNABLE_ROLES.has(role)) { await pool.query('ROLLBACK'); return json(res, 400, { error: 'invalid_staff_role' }); }
+      if (!locationIds.length || locationIds.some(id=>! /^[0-9a-f-]{36}$/i.test(id))) { await pool.query('ROLLBACK'); return json(res, 400, { error: 'at_least_one_location_required' }); }
+      const validLocations = await pool.query('select id from locations where organization_id=$1 and active=true and id=any($2::uuid[])', [organizationId,locationIds]);
+      if (validLocations.rowCount !== locationIds.length) { await pool.query('ROLLBACK'); return json(res, 400, { error: 'invalid_staff_location' }); }
       const found = await pool.query('select id,email,display_name,status from app_users where lower(email)=lower($1) limit 1 for update', [email]);
       if (!found.rowCount || found.rows[0].status !== 'active') {
         await pool.query('ROLLBACK');
@@ -61,12 +75,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         on conflict (organization_id,user_id)
         do update set role=excluded.role,active=true,updated_at=now()
       `, [organizationId,target.id,role]);
+      await pool.query('delete from membership_locations where organization_id=$1 and user_id=$2', [organizationId,target.id]);
+      for (const locationId of locationIds) {
+        await pool.query('insert into membership_locations (organization_id,user_id,location_id) values ($1,$2,$3)', [organizationId,target.id,locationId]);
+      }
       await pool.query(`
         insert into audit_events (organization_id,actor_user_id,action,entity_type,entity_id,before_data,after_data,reason)
         values ($1,$2,$3,'membership',$4,$5::jsonb,$6::jsonb,'Owner-managed staff access')
       `, [organizationId,user.id,prior.rowCount?'staff.membership_updated':'staff.member_added',target.id,prior.rowCount?JSON.stringify(prior.rows[0]):null,JSON.stringify({email:target.email,role,active:true})]);
       await pool.query('COMMIT');
-      return json(res, prior.rowCount ? 200 : 201, { staff: { userId:target.id,email:target.email,displayName:target.display_name,role,active:true } });
+      return json(res, prior.rowCount ? 200 : 201, { staff: { userId:target.id,email:target.email,displayName:target.display_name,role,active:true,locationIds } });
     }
 
     if (!/^[0-9a-f-]{36}$/i.test(targetUserId) || targetUserId===user.id) {
@@ -78,6 +96,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const action = String(req.body?.action ?? 'deactivate');
+    if (action === 'assign_locations') {
+      const locationIds = Array.isArray(req.body?.locationIds) ? [...new Set(req.body.locationIds.map(String))] : [];
+      if (!locationIds.length || locationIds.some(id=>! /^[0-9a-f-]{36}$/i.test(id))) { await pool.query('ROLLBACK'); return json(res, 400, { error: 'at_least_one_location_required' }); }
+      const validLocations = await pool.query('select id from locations where organization_id=$1 and active=true and id=any($2::uuid[])', [organizationId,locationIds]);
+      if (validLocations.rowCount !== locationIds.length) { await pool.query('ROLLBACK'); return json(res, 400, { error: 'invalid_staff_location' }); }
+      await pool.query('delete from membership_locations where organization_id=$1 and user_id=$2', [organizationId,targetUserId]);
+      for (const locationId of locationIds) await pool.query('insert into membership_locations (organization_id,user_id,location_id) values ($1,$2,$3)', [organizationId,targetUserId,locationId]);
+      await pool.query(`insert into audit_events (organization_id,actor_user_id,action,entity_type,entity_id,before_data,after_data,reason) values ($1,$2,'staff.locations_changed','membership',$3,$4::jsonb,$5::jsonb,'Owner-managed location access')`, [organizationId,user.id,targetUserId,JSON.stringify({locationAssignments:'previous'}),JSON.stringify({locationIds})]);
+      await pool.query('COMMIT');
+      return json(res,200,{staff:{userId:targetUserId,locationIds}});
+    }
     let nextRole = String(current.rows[0].role);
     let nextActive = Boolean(current.rows[0].active);
     if (action === 'deactivate') nextActive = false;

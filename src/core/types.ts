@@ -3,9 +3,9 @@ export type ISODate = string;
 export type CurrencyCode = string;
 export type SyncState = 'pending' | 'synced' | 'conflict' | 'rejected';
 
-export interface Organization { id: ID; name: string; baseCurrency: CurrencyCode; createdAt: ISODate; active: boolean; }
+export interface Organization { id: ID; name: string; baseCurrency: CurrencyCode; createdAt: ISODate; active: boolean; industry?: string; legalName?: string; contactEmail?: string; phone?: string; addressLine1?: string; addressLine2?: string; city?: string; state?: string; postalCode?: string; website?: string; taxIdentifier?: string; logoUrl?: string; }
 export type LocationType = 'region'|'branch'|'warehouse';
-export interface Location { id: ID; organizationId: ID; name: string; type: LocationType; parentId?: ID; active: boolean; }
+export interface Location { id: ID; organizationId: ID; name: string; type: LocationType; parentId?: ID; code?: string; active: boolean; phone?: string; contactEmail?: string; addressLine1?: string; addressLine2?: string; city?: string; state?: string; postalCode?: string; timezone?: string; }
 
 export interface Product {
   id: ID; organizationId: ID; sku: string; barcode?: string; name: string; brand?: string; category?: string;
@@ -57,8 +57,8 @@ export interface Membership { id: ID; organizationId: ID; userId: ID; role: Role
 
 export type AccountClass = 'asset'|'liability'|'equity'|'revenue'|'expense';
 export interface LedgerAccount { id: ID; organizationId: ID; code: string; name: string; class: AccountClass; normalBalance: 'debit'|'credit'; active: boolean; }
-export interface JournalEntry { id: ID; organizationId: ID; reference: string; description: string; occurredAt: ISODate; sourceType: 'sale'|'purchase'|'expense'|'transfer'|'opening'|'adjustment'|'other'; sourceId?: ID; status: 'posted'|'voided'; createdAt: ISODate; createdBy?: ID; syncState: SyncState; }
-export interface JournalLine { id: ID; journalEntryId: ID; accountId: ID; debitMinor: number; creditMinor: number; memo?: string; }
+export interface JournalEntry { id: ID; organizationId: ID; locationId?: ID; reference: string; description: string; occurredAt: ISODate; sourceType: 'sale'|'purchase'|'expense'|'transfer'|'opening'|'adjustment'|'other'; sourceId?: ID; status: 'posted'|'voided'; createdAt: ISODate; createdBy?: ID; syncState: SyncState; }
+export interface JournalLine { id: ID; journalEntryId: ID; accountId: ID; accountCode?: string; accountName?: string; debitMinor: number; creditMinor: number; memo?: string; }
 
 export interface Subscription { id: ID; organizationId?: ID; userId?: ID; plan: PlanCode; status: 'trialing'|'active'|'past_due'|'canceled'|'expired'; currentPeriodEnd?: ISODate; createdAt: ISODate; }
 export interface ConsentRecord { id: ID; userId?: ID; version: string; necessary: true; analytics: boolean; personalization: boolean; marketing: boolean; decidedAt: ISODate; source: 'banner'|'settings'|'account'; }

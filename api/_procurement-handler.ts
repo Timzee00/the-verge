@@ -1,12 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { db, transactionPool } from './_db.js';
 import { json, method, requireUser } from './_http.js';
-import { postPurchaseReceiptJournal, postTransferJournal } from './_accounting.js';
+import { postPurchaseReceiptJournal, postSupplierPaymentJournal, postTransferJournal } from './_accounting.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const OWNER_ROLES = new Set(['business_owner','platform_admin']);
 const MANAGE_ROLES = new Set(['business_owner','platform_admin','manager']);
-const PROCUREMENT_ROLES = new Set(['business_owner','platform_admin','manager','inventory_staff']);
+const PROCUREMENT_ROLES = new Set(['business_owner','platform_admin','manager','inventory_staff','accountant']);
+const FINANCE_ROLES = new Set(['business_owner','platform_admin','manager','accountant']);
 
 function optionalText(value: unknown,max:number,field:string):string|null {
   if(value===undefined||value===null||String(value).trim()==='')return null;
@@ -52,6 +53,9 @@ function mapOrderItem(row:any) {
 }
 function mapReceipt(row:any) {
   return {id:String(row.id),purchaseOrderId:String(row.purchase_order_id),supplierId:String(row.supplier_id),locationId:String(row.location_id),totalCostMinor:Number(row.total_cost_minor),receivedAt:row.received_at};
+}
+function mapSupplierPayment(row:any) {
+  return {id:String(row.id),supplierId:String(row.supplier_id),supplierName:row.supplier_name,receiptId:String(row.purchase_receipt_id),locationId:String(row.location_id),amountMinor:Number(row.amount_minor),paymentMethod:row.payment_method,reference:row.reference??'',notes:row.notes??'',occurredAt:row.occurred_at};
 }
 function mapTransfer(row:any) {
   return {id:String(row.id),organizationId:String(row.organization_id),reference:row.reference,fromLocationId:String(row.from_location_id),fromLocationName:row.from_location_name,toLocationId:String(row.to_location_id),toLocationName:row.to_location_name,status:row.status,notes:row.notes??'',createdAt:row.created_at,dispatchedAt:row.dispatched_at??null,receivedAt:row.received_at??null};
@@ -106,6 +110,34 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
       from purchase_receipts where organization_id=${organizationId} and location_id=any(${[...assigned]}::uuid[])
       order by received_at desc,id desc limit 100
     `:[];
+    const receiptIds=receipts.map((receipt:any)=>String(receipt.id));
+    const receiptAllocations=receiptIds.length?await sql`
+      select purchase_receipt_id,coalesce(sum(amount_minor),0) as paid_minor
+      from supplier_payment_allocations
+      where purchase_receipt_id=any(${receiptIds}::uuid[])
+      group by purchase_receipt_id
+    `:[];
+    const paidByReceipt=new Map<string,number>(receiptAllocations.map((row:any)=>[String(row.purchase_receipt_id),Number(row.paid_minor)] as [string,number]));
+    const receiptBalances=receipts.map((row:any)=>{
+      const total=Number(row.total_cost_minor),paid=paidByReceipt.get(String(row.id))??0;
+      if(!Number.isSafeInteger(total)||total<0||!Number.isSafeInteger(paid)||paid<0||paid>total)throw new Error('supplier_receipt_balance_invalid');
+      return {...mapReceipt(row),paidMinor:paid,outstandingMinor:total-paid};
+    });
+    const payments=FINANCE_ROLES.has(role)?OWNER_ROLES.has(role)?await sql`
+      select sp.*,s.name as supplier_name,spa.purchase_receipt_id,pr.location_id
+      from supplier_payments sp join suppliers s on s.id=sp.supplier_id
+      join supplier_payment_allocations spa on spa.payment_id=sp.id
+      join purchase_receipts pr on pr.id=spa.purchase_receipt_id
+      where sp.organization_id=${organizationId}
+      order by sp.occurred_at desc,sp.id desc limit 100
+    `:assigned.size?await sql`
+      select sp.*,s.name as supplier_name,spa.purchase_receipt_id,pr.location_id
+      from supplier_payments sp join suppliers s on s.id=sp.supplier_id
+      join supplier_payment_allocations spa on spa.payment_id=sp.id
+      join purchase_receipts pr on pr.id=spa.purchase_receipt_id
+      where sp.organization_id=${organizationId} and pr.location_id=any(${[...assigned]}::uuid[])
+      order by sp.occurred_at desc,sp.id desc limit 100
+    `:[[]]:[];
     const transfers=OWNER_ROLES.has(role)?await sql`
       select st.*,fl.name as from_location_name,tl.name as to_location_name
       from stock_transfers st join locations fl on fl.id=st.from_location_id join locations tl on tl.id=st.to_location_id
@@ -126,10 +158,12 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
     `:[];
     return json(res,200,{
       suppliers:suppliers.map(mapSupplier),purchaseOrders:orders.map(mapOrder),
-      purchaseOrderItems:orderItems.map(mapOrderItem),purchaseReceipts:receipts.map(mapReceipt),
+      purchaseOrderItems:orderItems.map(mapOrderItem),purchaseReceipts:receiptBalances,
+      supplierPayments:payments.map(mapSupplierPayment),
       transfers:transfers.map((row:any)=>({...mapTransfer(row),canDispatch:canAccessLocation(role,assigned,String(row.from_location_id)),canReceive:canAccessLocation(role,assigned,String(row.to_location_id))})),transferItems:transferItems.map(mapTransferItem),
       canManage:MANAGE_ROLES.has(role),
       canReceive:['business_owner','platform_admin','manager','inventory_staff'].includes(role),
+      canPaySuppliers:FINANCE_ROLES.has(role),
     });
   }
 
@@ -213,6 +247,87 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
       if(message.endsWith('_too_long')||['supplier_name_required','invalid_email','invalid_supplier','supplier_not_found'].includes(message))return json(res,400,{error:message});
       console.error('[procurement.supplier]',{name:error?.name,code:error?.code});
       return json(res,500,{error:'supplier_operation_failed'});
+    } finally { await pool.end(); }
+  }
+
+  if(action==='record_supplier_payment') {
+    if(!FINANCE_ROLES.has(role))return json(res,403,{error:'supplier_payment_permission_required'});
+    const paymentId=String(body.idempotencyKey??'');
+    const supplierId=String(body.supplierId??'');
+    const receiptId=String(body.receiptId??'');
+    const amountMinor=nonNegativeMinor(body.amountMinor,'payment_amount');
+    const paymentMethod=String(body.paymentMethod??'');
+    if(!UUID.test(paymentId)||!UUID.test(supplierId)||!UUID.test(receiptId)||amountMinor<=0||!['cash','bank','transfer','card'].includes(paymentMethod))return json(res,400,{error:'invalid_supplier_payment'});
+    const referenceText=optionalText(body.reference,80,'reference');
+    const notes=optionalText(body.notes,500,'notes');
+    const pool=transactionPool();
+    try {
+      await pool.query('BEGIN');
+      await pool.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[`supplier-payment:${organizationId}:${paymentId}`]);
+      const existing=await pool.query(
+        'select id,organization_id,supplier_id,amount_minor,payment_method,reference,notes from supplier_payments where id=$1 limit 1 for update',
+        [paymentId],
+      );
+      if(existing.rowCount) {
+        const row=existing.rows[0];
+        const allocations=await pool.query('select purchase_receipt_id,amount_minor from supplier_payment_allocations where payment_id=$1',[paymentId]);
+        if(String(row.organization_id)!==organizationId||String(row.supplier_id)!==supplierId||Number(row.amount_minor)!==amountMinor||row.payment_method!==paymentMethod||String(row.reference??'')!==String(referenceText??'')||String(row.notes??'')!==String(notes??'')||allocations.rows.length!==1||String(allocations.rows[0].purchase_receipt_id)!==receiptId||Number(allocations.rows[0].amount_minor)!==amountMinor) {
+          throw new Error('supplier_payment_idempotency_payload_mismatch');
+        }
+        await pool.query('COMMIT');
+        return json(res,200,{supplierPayment:{id:paymentId,deduplicated:true}});
+      }
+      const receipt=await pool.query(
+        `select pr.id,pr.organization_id,pr.supplier_id,pr.location_id,pr.total_cost_minor,s.name as supplier_name
+         from purchase_receipts pr join suppliers s on s.id=pr.supplier_id
+         where pr.id=$1 and pr.organization_id=$2 for update of pr`,
+        [receiptId,organizationId],
+      );
+      if(!receipt.rowCount)throw new Error('purchase_receipt_not_found');
+      const receiptRow=receipt.rows[0];
+      if(String(receiptRow.supplier_id)!==supplierId)throw new Error('supplier_receipt_mismatch');
+      const locationId=String(receiptRow.location_id);
+      if(!canAccessLocation(role,assigned,locationId))throw new Error('location_access_denied');
+      const paidResult=await pool.query(
+        'select coalesce(sum(amount_minor),0) as paid from supplier_payment_allocations where purchase_receipt_id=$1',
+        [receiptId],
+      );
+      const receiptTotal=Number(receiptRow.total_cost_minor),paid=Number(paidResult.rows[0]?.paid??0);
+      if(!Number.isSafeInteger(receiptTotal)||receiptTotal<0||!Number.isSafeInteger(paid)||paid<0||paid>receiptTotal)throw new Error('supplier_receipt_balance_invalid');
+      const outstanding=receiptTotal-paid;
+      if(amountMinor>outstanding)throw new Error('supplier_payment_exceeds_outstanding');
+      const occurredAt=new Date().toISOString();
+      const inserted=await pool.query(
+        `insert into supplier_payments
+          (id,organization_id,supplier_id,amount_minor,payment_method,reference,notes,occurred_at,created_by)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
+        [paymentId,organizationId,supplierId,amountMinor,paymentMethod,referenceText,notes,occurredAt,user.id],
+      );
+      await pool.query(
+        `insert into supplier_payment_allocations (id,payment_id,purchase_receipt_id,amount_minor)
+         values (gen_random_uuid(),$1,$2,$3)`,
+        [paymentId,receiptId,amountMinor],
+      );
+      await postSupplierPaymentJournal(pool,{
+        organizationId,locationId,sourceId:paymentId,occurredAt,createdBy:user.id,
+        supplierName:String(receiptRow.supplier_name),amountMinor,
+        paymentMethod:paymentMethod as 'cash'|'bank'|'transfer'|'card',
+      });
+      await pool.query(
+        `insert into audit_events (organization_id,actor_user_id,action,entity_type,entity_id,after_data,reason)
+         values ($1,$2,'supplier.payment_recorded','supplier_payment',$3,$4::jsonb,'Payment allocated to supplier purchase receipt')`,
+        [organizationId,user.id,paymentId,JSON.stringify({supplierId,receiptId,amountMinor,paymentMethod,outstandingBefore:outstanding,outstandingAfter:outstanding-amountMinor})],
+      );
+      await pool.query('COMMIT');
+      return json(res,201,{supplierPayment:{id:inserted.rows[0].id,receiptId,amountMinor,occurredAt,outstandingMinor:outstanding-amountMinor}});
+    } catch(error:any) {
+      await pool.query('ROLLBACK').catch(()=>undefined);
+      const message=String(error?.message??error);
+      if(['supplier_payment_idempotency_payload_mismatch'].includes(message))return json(res,409,{error:message});
+      if(['purchase_receipt_not_found','supplier_receipt_mismatch','location_access_denied','supplier_receipt_balance_invalid','supplier_payment_exceeds_outstanding'].includes(message))return json(res,400,{error:message});
+      if(error?.code==='23505')return json(res,409,{error:'supplier_payment_conflict'});
+      console.error('[procurement.supplier_payment]',{name:error?.name,code:error?.code});
+      return json(res,500,{error:'supplier_payment_failed'});
     } finally { await pool.end(); }
   }
 

@@ -101,3 +101,21 @@ CREATE CONSTRAINT TRIGGER journal_lines_balanced
 AFTER INSERT OR UPDATE OR DELETE ON journal_lines
 DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW EXECUTE FUNCTION verge_assert_journal_balanced();
+
+
+-- Provision the standard chart for organisations that already exist.
+INSERT INTO ledger_accounts (id,organization_id,code,name,account_class,normal_balance,active)
+SELECT gen_random_uuid(), o.id, seed.code, seed.name, seed.account_class, seed.normal_balance, true
+FROM organizations o
+CROSS JOIN (VALUES
+  ('1000','Cash','asset','debit'),
+  ('1010','Bank','asset','debit'),
+  ('1100','Accounts Receivable','asset','debit'),
+  ('1200','Inventory','asset','debit'),
+  ('2000','Accounts Payable','liability','credit'),
+  ('3000','Owner Equity','equity','credit'),
+  ('4000','Sales Revenue','revenue','credit'),
+  ('5000','Cost of Goods Sold','expense','debit'),
+  ('6000','Operating Expenses','expense','debit')
+) AS seed(code,name,account_class,normal_balance)
+ON CONFLICT (organization_id,code) DO NOTHING;

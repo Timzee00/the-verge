@@ -180,9 +180,9 @@ export default function ProcurementWorkspace({organizationId,locations,products,
         await localDB.meta.put({key:keyName,value:JSON.stringify({id:idempotencyKey,payload:requestPayload,request})});
       }
       await api.procurementAction({organizationId,action:'create_purchase_order',idempotencyKey,...request});
-      await localDB.meta.delete(keyName);
       setOrderNotes('');setExpectedAt('');setOrderLines([emptyOrderLine()]);
       await refreshAfterChange('Purchase order created and sent to the supplier workflow.');
+      await localDB.meta.delete(keyName);
     } catch(err) {setError(err instanceof Error?err.message:'Purchase order could not be created.');}
     finally {setBusy(false);}
   }
@@ -217,8 +217,9 @@ export default function ProcurementWorkspace({organizationId,locations,products,
         await localDB.meta.put({key:keyName,value:JSON.stringify({id:idempotencyKey,payload:requestPayload})});
       }
       const result=await api.procurementAction({organizationId,action:'receive_purchase_order',purchaseOrderId:order.id,idempotencyKey,items});
-      await localDB.meta.delete(keyName);
       await refreshAfterChange(`Goods received. Receipt ${result.receipt?.id??''} is recorded and the inventory ledger has been updated.`);
+      await localDB.meta.delete(keyName);
+      setPendingReceiptIds(current=>current.filter(id=>id!==order.id));
     } catch(err) {setError(err instanceof Error?err.message:'Purchase receipt could not be recorded. Retry using the same receipt details.');}
     finally {setBusy(false);}
   }
@@ -268,9 +269,9 @@ export default function ProcurementWorkspace({organizationId,locations,products,
         await localDB.meta.put({key:keyName,value:JSON.stringify({id:idempotencyKey,payload:requestPayload,request})});
       }
       await api.procurementAction({organizationId,action:'create_transfer',idempotencyKey,...request});
-      await localDB.meta.delete(keyName);
       setTransferNotes('');setTransferLines([emptyTransferLine()]);
       await refreshAfterChange('Stock transfer created as a draft.');
+      await localDB.meta.delete(keyName);
     } catch(err) {setError(err instanceof Error?err.message:'Transfer could not be created.');}
     finally {setBusy(false);}
   }

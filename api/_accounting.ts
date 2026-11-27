@@ -1,3 +1,5 @@
+import { assertBalanced, buildExpenseJournalLines, buildSaleJournalLines } from '../src/domain/accounting.js';
+
 type QueryClient = {
   query: (text: string, values?: unknown[]) => Promise<{ rows: any[]; rowCount: number | null }>;
 };
@@ -17,21 +19,7 @@ const ACCOUNT_SEEDS = [
 type JournalLineInput = { accountId: string; debitMinor: number; creditMinor: number; memo?: string };
 
 function assertJournal(lines: JournalLineInput[]) {
-  if (!Array.isArray(lines) || lines.length < 2) throw new Error('journal_requires_two_lines');
-  let debit = 0;
-  let credit = 0;
-  for (const line of lines) {
-    if (!line.accountId ||
-      !Number.isSafeInteger(line.debitMinor) || line.debitMinor < 0 ||
-      !Number.isSafeInteger(line.creditMinor) || line.creditMinor < 0 ||
-      ((line.debitMinor > 0) === (line.creditMinor > 0))) {
-      throw new Error('invalid_journal_line');
-    }
-    debit += line.debitMinor;
-    credit += line.creditMinor;
-    if (!Number.isSafeInteger(debit) || !Number.isSafeInteger(credit)) throw new Error('journal_overflow');
-  }
-  if (debit !== credit) throw new Error('journal_unbalanced');
+  assertBalanced(lines);
 }
 
 export async function ensureAccountingAccounts(client: QueryClient, organizationId: string) {
@@ -143,16 +131,19 @@ export async function postSaleJournal(
 
   const accounts = await ensureAccountingAccounts(client, input.organizationId);
   const tenderCode = input.paymentMethod === 'cash' ? '1000' : input.paymentMethod === 'credit' ? '1100' : '1010';
-  const lines: JournalLineInput[] = [
-    { accountId: accounts[tenderCode], debitMinor: input.totalMinor, creditMinor: 0, memo: 'Sale proceeds' },
-    { accountId: accounts['4000'], debitMinor: 0, creditMinor: input.totalMinor, memo: 'Net sales revenue' },
-  ];
-  if (costMinor > 0) {
-    lines.push(
-      { accountId: accounts['5000'], debitMinor: costMinor, creditMinor: 0, memo: 'Cost of goods sold' },
-      { accountId: accounts['1200'], debitMinor: 0, creditMinor: costMinor, memo: 'Inventory relieved at recorded cost' },
-    );
-  }
+  const rawLines = buildSaleJournalLines({
+    cashOrReceivableAccountId: accounts[tenderCode],
+    revenueAccountId: accounts['4000'],
+    inventoryAccountId: accounts['1200'],
+    cogsAccountId: accounts['5000'],
+    saleAmountMinor: input.totalMinor,
+    costAmountMinor: costMinor,
+    creditSale: input.paymentMethod === 'credit',
+  });
+  const lines: JournalLineInput[] = rawLines.map((line,index)=>({
+    ...line,
+    memo: index===0?'Sale proceeds':index===1?'Net sales revenue':index===2?'Cost of goods sold':'Inventory relieved at recorded cost',
+  }));
   return createPostedJournal(client, {
     organizationId: input.organizationId, locationId: input.locationId, sourceType: 'sale',
     sourceId: input.sourceId, description: `Sale ${input.sourceId.slice(0, 8)}`,
@@ -170,13 +161,17 @@ export async function postExpenseJournal(
   if (!input.locationId || !Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) throw new Error('invalid_expense_posting');
   const accounts = await ensureAccountingAccounts(client, input.organizationId);
   const paymentCode = input.paymentMethod === 'cash' ? '1000' : '1010';
+  const lines: JournalLineInput[] = buildExpenseJournalLines({
+    expenseAccountId: accounts['6000'],
+    paymentAccountId: accounts[paymentCode],
+    amountMinor: input.amountMinor,
+  }).map((line,index)=>({
+    ...line,
+    memo: index===0?input.category:`Paid by ${input.paymentMethod}`,
+  }));
   return createPostedJournal(client, {
     organizationId: input.organizationId, locationId: input.locationId, sourceType: 'expense',
     sourceId: input.sourceId, description: `${input.category}: ${input.description}`.slice(0, 240),
-    occurredAt: input.occurredAt, createdBy: input.createdBy,
-    lines: [
-      { accountId: accounts['6000'], debitMinor: input.amountMinor, creditMinor: 0, memo: input.category },
-      { accountId: accounts[paymentCode], debitMinor: 0, creditMinor: input.amountMinor, memo: `Paid by ${input.paymentMethod}` },
-    ],
+    occurredAt: input.occurredAt, createdBy: input.createdBy, lines,
   });
 }

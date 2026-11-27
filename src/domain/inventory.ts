@@ -2,6 +2,21 @@ import type { InventoryEvent, InventoryEventType, ID } from '../core/types.js';
 
 const TYPES = new Set<InventoryEventType>(['opening','purchase','sale','sale_void','return','damage','adjustment','transfer_out','transfer_in','reservation','reservation_release']);
 
+export function validateInventoryMovement(type: unknown, quantityDelta: unknown): number {
+  const quantity = Number(quantityDelta);
+  if (!Number.isFinite(quantity) || quantity === 0) throw new Error('invalid_inventory_quantity');
+  if (type === 'sale') throw new Error('sale_requires_pos_transaction');
+  if (type === 'sale_void' || type === 'return') throw new Error('return_or_void_requires_approval_workflow');
+  const positiveTypes = new Set(['opening', 'purchase', 'transfer_in', 'reservation', 'reservation_release']);
+  const negativeTypes = new Set(['damage', 'transfer_out']);
+  if (positiveTypes.has(String(type)) && quantity < 0) throw new Error('invalid_inventory_direction');
+  if (negativeTypes.has(String(type)) && quantity > 0) throw new Error('invalid_inventory_direction');
+  if (type !== 'adjustment' && !positiveTypes.has(String(type)) && !negativeTypes.has(String(type))) {
+    throw new Error('invalid_inventory_event_type');
+  }
+  return quantity;
+}
+
 export function validateInventoryEvent(event: Pick<InventoryEvent,'type'|'quantityDelta'|'locationId'|'productId'>): void {
   if (!TYPES.has(event.type)) throw new Error(`Unsupported inventory event type: ${event.type}`);
   if (!Number.isFinite(event.quantityDelta) || event.quantityDelta === 0) throw new Error('Inventory quantity delta must be a non-zero finite number');

@@ -29,6 +29,11 @@ export interface Sale {
   occurredAt: ISODate; deviceId: ID; localSequence: number; syncState: SyncState; createdAt: ISODate;
 }
 export interface SaleItem { id: ID; saleId: ID; productId: ID; quantity: number; unitPriceMinor: number; unitCostMinor: number; discountMinor: number; }
+
+export interface ParkedCart {
+  id: ID; organizationId: ID; locationId: ID; createdBy: ID; label: string;
+  customerId?: ID; items: Array<{ productId: ID; quantity: number }>; createdAt: ISODate; updatedAt: ISODate;
+}
 export interface Expense { id: ID; organizationId: ID; locationId?: ID; amountMinor: number; category: string; description: string; paymentMethod: 'cash'|'bank'|'transfer'|'card'; occurredAt: ISODate; deviceId: ID; syncState: SyncState; createdAt: ISODate; }
 
 export type SyncEntity = 'inventory_event'|'sale'|'purchase'|'customer'|'expense'|'transfer'|'product'|'personal_transaction'|'payment'|'journal_entry';

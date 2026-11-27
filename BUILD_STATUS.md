@@ -80,7 +80,7 @@ These are source changes only. The current main branch has not been built or dep
 ### Source changes
 - Fixed the dollar-quoting delimiter in migration 006 so its constraint-management DO block is valid PostgreSQL.
 - Added `src/glass-theme.css` and loaded it after the base stylesheet. It standardises translucent glass surfaces, light/dark materials, focus states, touch targets, mobile layouts, and reduced-motion behavior across shared, owner, cashier, inventory, accountant, business, and procurement screens.
-- Latest UI source commit at this checkpoint: `e741659ba6d6c422d6fa435c1b77780c8489e377`.
+- Latest UI source commit at this checkpoint: `43e75fe62e465cb4ff607eb67929166a46343425`.
 
 ### Neon database migrations
 - Project: `The Verge` (`flat-mud-27764946`).
@@ -95,3 +95,9 @@ These are source changes only. The current main branch has not been built or dep
 - Vercel's GitHub status check reports a build-rate-limit failure. The latest READY production deployment is commit `58cc1b935ee64a315a0b05a7891f6b17e7939ede`, which is older than the glass UI source commit.
 - The new interface has not yet been deployed to the live URL. Browser tests across owner, cashier, inventory staff, and accountant accounts, plus offline/reconnect and tenant-isolation tests, remain NOT RUN.
 - Do not mark the release production-ready until CI/build succeeds, the exact current source is deployed, and role-based browser smoke tests pass.
+
+
+### Release gate follow-up — 28 November 2026
+- The latest push triggered GitHub Actions run `46080702234`; its `verify` job failed before any steps or downloadable logs were exposed.
+- The commit status identifies the Vercel check `timzee-deploy-format-test` as failed with a Vercel `build-rate-limit` restriction. No newer Vercel deployment exists for the latest source.
+- Latest main source commit for the interface: `43e75fe62e465cb4ff607eb67929166a46343425`.

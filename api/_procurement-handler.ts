@@ -458,9 +458,10 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
       );
       if(!lines.rows.length)throw new Error('transfer_has_no_items');
       const productIds=lines.rows.map((line:any)=>String(line.product_id)).sort();
+      const stockLocationId=stage==='dispatch'?String(transfer.from_location_id):String(transfer.to_location_id);
       for(const productId of productIds)await pool.query(
         'select pg_advisory_xact_lock(hashtextextended($1,0))',
-        [`inventory:${organizationId}:${transfer.from_location_id}:${productId}`],
+        [`inventory:${organizationId}:${stockLocationId}:${productId}`],
       );
       const eventId=crypto.randomUUID();
       let totalCost=0;

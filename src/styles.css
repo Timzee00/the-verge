@@ -352,3 +352,25 @@ body[data-theme="dark"] .auth-notice{color:#8fe0b8;background:rgba(28,164,104,.1
   .accounting-trial-row span strong { font-size:10px; }
   .accounting-trial-summary strong { font-size:15px; }
 }
+
+
+/* Supplier accounts payable and settlement */
+.supplier-settlement { display:grid; gap:13px; padding:15px; border:1px solid var(--line); border-radius:12px; background:var(--surface); }
+.supplier-settlement-heading h3 { margin:4px 0; font-size:15px; color:var(--text); }
+.supplier-settlement-heading p { max-width:720px; margin:0; color:var(--muted); font-size:10px; line-height:1.55; }
+.supplier-balance-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+.supplier-balance-grid article { display:grid; gap:8px; min-width:0; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--surface-soft); }
+.supplier-balance-grid article > strong { color:var(--text); font-size:12px; overflow-wrap:anywhere; }
+.supplier-balance-grid article > div { display:flex; justify-content:space-between; align-items:center; gap:8px; color:var(--muted); font-size:10px; }
+.supplier-balance-grid article b { color:var(--text); font-variant-numeric:tabular-nums; }
+.supplier-balance-grid .supplier-outstanding { padding-top:7px; border-top:1px solid var(--line); }
+.supplier-balance-grid .supplier-outstanding b { color:var(--primary); }
+.supplier-payment-form { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.supplier-payment-form > .primary { grid-column:1/-1; justify-self:start; }
+.supplier-payment-hint { grid-column:1/-1; color:var(--muted); font-size:10px; }
+.supplier-payment-hint strong { color:var(--text); }
+.supplier-payment-history { display:grid; gap:9px; }
+@media (max-width:600px) {
+  .supplier-balance-grid, .supplier-payment-form { grid-template-columns:1fr; }
+  .supplier-payment-form > .primary { width:100%; }
+}

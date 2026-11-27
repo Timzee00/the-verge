@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { localDB } from '../db/local';
 import { appendInventoryEvent, getLocalStock } from '../inventory/ledger';
 import { exportAccount, EXPORT_SECTIONS, type ExportSection } from '../export/account';
-import { DEFAULT_CHART, assertBalanced } from '../domain/accounting';
+import { DEFAULT_CHART } from '../domain/accounting';
 import { PLAN_ENTITLEMENTS } from '../domain/entitlements';
 import type { Budget, Debt, Expense, InventoryEvent, JournalEntry, JournalLine, LedgerAccount, PersonalAccount, PersonalTransaction, Product, SavingsGoal, Sale, SaleItem, Customer } from '../core/types';
 import { calculateSale } from '../domain/sales';

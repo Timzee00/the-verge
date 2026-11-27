@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { parseMajorToMinor } from '../domain/money';
 import type { ProcurementSnapshot } from '../api';
 import { api } from '../api';
@@ -19,14 +19,38 @@ export default function SupplierPaymentsPanel({organizationId,snapshot,onSaved}:
   const [paymentMethod,setPaymentMethod]=useState<'cash'|'bank'|'transfer'|'card'>('bank');
   const [reference,setReference]=useState('');
   const [busy,setBusy]=useState(false);
+  const [pendingPayment,setPendingPayment]=useState<{key:string;id:string;payload:string;request:{supplierId:string;receiptId:string;amountMinor:number;paymentMethod:'cash'|'bank'|'transfer'|'card';reference?:string}}|null>(null);
   const [error,setError]=useState('');
   const [notice,setNotice]=useState('');
+
+  useEffect(()=>{
+    let live=true;
+    const restore=async()=>{
+      const prefix=`supplierPaymentKey:${organizationId}:`;
+      const record=await localDB.meta.toCollection().filter(item=>item.key.startsWith(prefix)).first();
+      if(!record)return;
+      try {
+        const stored=JSON.parse(record.value) as {id:string;payload:string;request:{supplierId:string;receiptId:string;amountMinor:number;paymentMethod:'cash'|'bank'|'transfer'|'card';reference?:string}};
+        if(!stored.id||!stored.payload||!stored.request)return;
+        if(live) {
+          setPendingPayment({key:record.key,...stored});
+          setSupplierId(stored.request.supplierId);
+          setReceiptId(stored.request.receiptId);
+          setAmount((stored.request.amountMinor/100).toFixed(2));
+          setPaymentMethod(stored.request.paymentMethod);
+          setReference(stored.request.reference??'');
+        }
+      } catch { if(live)setError('A pending payment recovery record could not be read. Contact the business owner before retrying the payment.'); }
+    };
+    void restore().catch(()=>{if(live)setError('A pending payment recovery record could not be loaded.');});
+    return()=>{live=false;};
+  },[organizationId]);
 
   const outstandingReceipts=useMemo(
     ()=>snapshot.purchaseReceipts.filter(receipt=>receipt.supplierId===supplierId&&receipt.outstandingMinor>0),
     [snapshot.purchaseReceipts,supplierId],
   );
-  const selectedReceipt=outstandingReceipts.find(receipt=>receipt.id===receiptId)??outstandingReceipts[0];
+  const selectedReceipt=snapshot.purchaseReceipts.find(receipt=>receipt.id===receiptId)??outstandingReceipts[0];
   const supplier=snapshot.suppliers.find(item=>item.id===supplierId);
   const supplierTotals=useMemo(()=>snapshot.suppliers.map(item=>{
     const receipts=snapshot.purchaseReceipts.filter(receipt=>receipt.supplierId===item.id);
@@ -45,7 +69,7 @@ export default function SupplierPaymentsPanel({organizationId,snapshot,onSaved}:
     try {
       if(!supplierId||!selectedReceipt)throw new Error('Choose a supplier receipt with an outstanding balance.');
       const amountMinor=parseMajorToMinor(amount);
-      if(amountMinor<=0||amountMinor>selectedReceipt.outstandingMinor)throw new Error('Payment must be greater than zero and cannot exceed the receipt outstanding balance.');
+      if(amountMinor<=0)throw new Error('Payment must be greater than zero.');
       const request={
         supplierId,receiptId:selectedReceipt.id,amountMinor,paymentMethod,
         reference:reference.trim()||undefined,
@@ -66,11 +90,13 @@ export default function SupplierPaymentsPanel({organizationId,snapshot,onSaved}:
           throw new Error('A previous supplier payment is awaiting confirmation. Its original details have been restored; retry those exact details before recording another payment.');
         }
       } else {
+        if(amountMinor>selectedReceipt.outstandingMinor)throw new Error('Payment cannot exceed the receipt outstanding balance.');
         idempotencyKey=crypto.randomUUID();
         await localDB.meta.put({key:keyName,value:JSON.stringify({id:idempotencyKey,payload,request})});
       }
       const result=await api.procurementAction({organizationId,action:'record_supplier_payment',idempotencyKey,...request});
       await localDB.meta.delete(keyName);
+      setPendingPayment(null);
       setAmount('');setReference('');
       setReceiptId('');
       setNotice(`Payment recorded: ${money(result.supplierPayment?.amountMinor??amountMinor)}. The supplier payable journal has been updated.`);
@@ -98,11 +124,11 @@ export default function SupplierPaymentsPanel({organizationId,snapshot,onSaved}:
     <form className="procurement-form supplier-payment-form" onSubmit={submit}>
       <div className="procurement-form-heading"><div><strong>Record supplier payment</strong><small>Payments are allocated to one receipt at a time, preventing overpayment or unallocated cash entries.</small></div></div>
       <label>Supplier<select required value={supplierId} onChange={event=>{setSupplierId(event.target.value);setReceiptId('');}}><option value="">Choose supplier</option>{snapshot.suppliers.filter(item=>item.active).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-      <label>Outstanding receipt<select required value={selectedReceipt?.id??''} onChange={event=>setReceiptId(event.target.value)}><option value="">Choose receipt</option>{outstandingReceipts.map(receipt=>{const order=snapshot.purchaseOrders.find(item=>item.id===receipt.purchaseOrderId);return <option key={receipt.id} value={receipt.id}>{order?.reference??receipt.id.slice(0,8)} · outstanding {money(receipt.outstandingMinor)}</option>;})}</select></label>
+      <label>Outstanding receipt<select required value={selectedReceipt?.id??''} onChange={event=>setReceiptId(event.target.value)}><option value="">Choose receipt</option>{pendingPayment&&snapshot.purchaseReceipts.some(receipt=>receipt.id===pendingPayment.request.receiptId&&!outstandingReceipts.some(item=>item.id===receipt.id))&&<option value={pendingPayment.request.receiptId}>Pending confirmation · {pendingPayment.request.receiptId.slice(0,8)}</option>}{outstandingReceipts.map(receipt=>{const order=snapshot.purchaseOrders.find(item=>item.id===receipt.purchaseOrderId);return <option key={receipt.id} value={receipt.id}>{order?.reference??receipt.id.slice(0,8)} · outstanding {money(receipt.outstandingMinor)}</option>;})}</select></label>
       <label>Amount (₦)<input required inputMode="decimal" value={amount} onChange={event=>setAmount(event.target.value)} placeholder="0.00"/></label>
       <label>Payment method<select value={paymentMethod} onChange={event=>setPaymentMethod(event.target.value as typeof paymentMethod)}><option value="cash">Cash</option><option value="bank">Bank</option><option value="transfer">Transfer</option><option value="card">Card</option></select></label>
       <label>Transaction reference<input maxLength={80} value={reference} onChange={event=>setReference(event.target.value)} placeholder="Bank or receipt reference (optional)"/></label>
-      {selectedReceipt&&<div className="supplier-payment-hint">Selected receipt outstanding: <strong>{money(selectedReceipt.outstandingMinor)}</strong>{supplier&&<> · Supplier: <strong>{supplier.name}</strong></>}</div>}
+      {selectedReceipt&&<div className="supplier-payment-hint">Selected receipt outstanding: <strong>{money(selectedReceipt.outstandingMinor)}</strong>{pendingPayment&&pendingPayment.request.receiptId===selectedReceipt.id&&<> · <strong>Retry pending payment</strong></>}{supplier&&<> · Supplier: <strong>{supplier.name}</strong></>}</div>}
       <button className="primary" type="submit" disabled={busy||!selectedReceipt||!amount.trim()}>{busy?'Recording payment…':'Record supplier payment'}</button>
     </form>
     <div className="supplier-payment-history">

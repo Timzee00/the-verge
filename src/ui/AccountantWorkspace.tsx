@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import type { Expense, Location, Sale, SaleItem } from '../core/types';
+import type { Expense, JournalEntry, JournalLine, Location, Sale, SaleItem } from '../core/types';
 import type { SessionOrg } from '../api';
 import './staff-workspace.css';
 
@@ -14,6 +14,8 @@ type Props = {
   sales: Sale[];
   saleItems: SaleItem[];
   expenses: Expense[];
+  journals: JournalEntry[];
+  journalLines: JournalLine[];
   online: boolean;
   pending: number;
   onOrganizationChange: (id: string) => Promise<void>;
@@ -32,7 +34,7 @@ const dateTime = (value: string) => new Intl.DateTimeFormat('en-NG', {
 export default function AccountantWorkspace(props: Props) {
   const {
     userId, userEmail, organizationId, organizationName, organizations, locations,
-    locationId, sales, saleItems, expenses, online, pending, onOrganizationChange,
+    locationId, sales, saleItems, expenses, journals, journalLines, online, pending, onOrganizationChange,
     onLocationChange, onRecordExpense, onLogout,
   } = props;
   const [amount, setAmount] = useState('');
@@ -49,6 +51,9 @@ export default function AccountantWorkspace(props: Props) {
   const locationSaleIds = useMemo(() => new Set(locationSales.map(sale => sale.id)), [locationSales]);
   const locationSaleItems = useMemo(() => saleItems.filter(item => locationSaleIds.has(item.saleId)), [saleItems, locationSaleIds]);
   const locationExpenses = useMemo(() => expenses.filter(item => item.locationId === locationId), [expenses, locationId]);
+  const locationJournals = useMemo(() => journals.filter(entry => !entry.locationId || entry.locationId === locationId), [journals, locationId]);
+  const locationJournalIds = useMemo(() => new Set(locationJournals.map(entry => entry.id)), [locationJournals]);
+  const visibleJournalLines = useMemo(() => journalLines.filter(line => locationJournalIds.has(line.journalEntryId)), [journalLines, locationJournalIds]);
   const totals = useMemo(() => {
     const revenue = completedSales.reduce((sum, sale) => sum + Number(sale.totalMinor), 0);
     const cogs = locationSaleItems.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitCostMinor)), 0);
@@ -139,7 +144,19 @@ export default function AccountantWorkspace(props: Props) {
           : <div className="staff-empty">No completed sales are available for your assigned locations yet.</div>}
       </section>
 
-      <p className="accountant-disclaimer">This workspace summarizes the most recent records cached on this device (up to 50 sales and 100 expenses). It is an operational snapshot, not a period-close statement or a substitute for posted double-entry accounts.</p>
+      <section className="panel accountant-records-panel">
+        <div className="accountant-records-heading"><div><span className="eyebrow">DOUBLE-ENTRY LEDGER</span><h2>Posted journal entries</h2></div><span>{locationJournals.length} loaded</span></div>
+        {locationJournals.length ? <div className="accountant-record-list">{locationJournals.slice(0,30).map(entry => {
+          const lines = visibleJournalLines.filter(line => line.journalEntryId === entry.id);
+          const debit = lines.reduce((sum,line)=>sum+Number(line.debitMinor),0);
+          const credit = lines.reduce((sum,line)=>sum+Number(line.creditMinor),0);
+          return <details className="accounting-journal-row" key={entry.id}>
+            <summary><span><strong>{entry.reference} · {entry.description}</strong><small>{entry.sourceType} · {dateTime(entry.occurredAt)}</small></span><span><strong>{money(debit)}</strong><small>{debit===credit?'Balanced':'Needs review'}</small></span></summary>
+            <div className="accounting-journal-lines">{lines.map(line=><div key={line.id}><span>{line.accountCode??line.accountId} · {line.accountName??''}</span><strong>{line.debitMinor?money(line.debitMinor):'—'}</strong><strong>{line.creditMinor?money(line.creditMinor):'—'}</strong></div>)}</div>
+          </details>;
+        })}</div> : <div className="staff-empty">No posted journal entries are available for this location yet.</div>}
+      </section>
+      <p className="accountant-disclaimer">This screen shows the latest records available on this device. Automatic journal posting currently covers validated sales and expenses. Supplier purchases, transfers, period close and reversals remain separate release workflows.</p>
       <footer className="staff-footer"><span>THE VERGE · Powered by Timzee Corp</span><span>{location?.name ?? 'No location'} · {online ? 'Connected' : 'Offline'} · Staff {userId.slice(0, 6).toUpperCase()}</span></footer>
     </main>
   </div>;

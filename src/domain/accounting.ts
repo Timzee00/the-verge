@@ -32,6 +32,28 @@ export function accountNetEffect(account: Pick<LedgerAccount,'normalBalance'>, d
 
 export function accountClassLabel(value: AccountClass): string { return value.charAt(0).toUpperCase() + value.slice(1); }
 
+export interface ExpensePostingInput {
+  expenseAccountId: string;
+  paymentAccountId: string;
+  amountMinor: number;
+}
+
+/** Canonical double-entry effect of an operating expense. */
+export function buildExpenseJournalLines(input: ExpensePostingInput): Array<Omit<JournalLine, 'id' | 'journalEntryId'>> {
+  if (!input.expenseAccountId || !input.paymentAccountId || input.expenseAccountId === input.paymentAccountId) {
+    throw new Error('Expense posting requires two different ledger accounts');
+  }
+  if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) {
+    throw new Error('Expense amount must be a positive safe integer');
+  }
+  const lines = [
+    { accountId: input.expenseAccountId, debitMinor: input.amountMinor, creditMinor: 0 },
+    { accountId: input.paymentAccountId, debitMinor: 0, creditMinor: input.amountMinor },
+  ];
+  assertBalanced(lines);
+  return lines;
+}
+
 export interface SalePostingInput {
   cashOrReceivableAccountId: string;
   revenueAccountId: string;

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run test:domain && tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false",
     "test:domain": "tsc --module nodenext --target ES2022 --moduleResolution nodenext --outDir .tmp-test src/domain/*.ts src/test/domain.spec.ts && node .tmp-test/test/domain.spec.js",

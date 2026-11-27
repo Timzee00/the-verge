@@ -222,7 +222,7 @@ export default function ProcurementWorkspace({organizationId,locations,products,
   }
 
   async function cancelPurchaseOrder(order:PurchaseOrderRecord) {
-    if(busy||!window.confirm('Cancel '+order.reference+'? Orders with receipts cannot be cancelled.'))return;
+    if(busy||!window.confirm('Cancel '+order.reference+'? Any goods already received will remain recorded; only the outstanding quantity will be cancelled.'))return;
     setBusy(true);setError('');setNotice('');
     try { await api.procurementAction({organizationId,action:'cancel_purchase_order',purchaseOrderId:order.id}); await refreshAfterChange('Purchase order cancelled.'); }
     catch(err) {setError(err instanceof Error?err.message:'Purchase order could not be cancelled.');}
@@ -354,7 +354,7 @@ export default function ProcurementWorkspace({organizationId,locations,products,
               </div>;
             })}
             {pending&&snapshot?.canManage&&<div className="procurement-order-footer"><span>Remaining lines can be received in multiple deliveries.</span><button type="button" className="primary" disabled={busy} onClick={()=>void receivePurchaseOrder(order)}>Record delivery</button></div>}
-          {order.status==='ordered'&&!pendingReceiptIds.includes(order.id)&&items.every(item=>item.quantityReceived===0)&&snapshot?.canManage&&<div className="procurement-order-footer"><span>This order has not been received and can be cancelled.</span><button type="button" className="secondary" disabled={busy} onClick={()=>void cancelPurchaseOrder(order)}>Cancel order</button></div>}
+          {(order.status==='ordered'||order.status==='partially_received')&&!pendingReceiptIds.includes(order.id)&&snapshot?.canManage&&<div className="procurement-order-footer"><span>Cancel the remaining quantity while preserving all goods already received.</span><button type="button" className="secondary" disabled={busy} onClick={()=>void cancelPurchaseOrder(order)}>Cancel remaining</button></div>}
           </article>;
         })}
         {!snapshot?.purchaseOrders.length&&<div className="procurement-empty">No purchase orders yet. Create an order to record an expected supplier delivery.</div>}

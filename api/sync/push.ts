@@ -286,9 +286,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await pool.query('ROLLBACK').catch(() => undefined);
       const message = errorText(error);
       const errorCode=String((error as any)?.code??'');
-      const transientCodes=new Set(['40001','40P01','55P03','57014','57P01','53300','ECONNRESET','ECONNREFUSED','ETIMEDOUT','EAI_AGAIN','ENOTFOUND']);
       const conflict=message==='insufficient_stock'||message==='price_changed_refresh_cart'||message==='product_cost_changed_refresh_cart';
-      const rejected=!conflict&&!transientCodes.has(errorCode);
+      const terminalMessages=new Set([
+        'sale_requires_pos_transaction','return_or_void_requires_approval_workflow',
+        'discount_requires_approval_workflow','location_access_denied','ownership_check_failed',
+        'customer_ownership_check_failed','customer_not_available','product_not_available',
+        'invalid_sale','invalid_sale_payload','invalid_sale_quantity','invalid_sale_identity',
+        'invalid_inventory_event_identity','invalid_product_identity','invalid_customer_identity',
+        'invalid_expense_identity','invalid_expense_payload','sale_total_mismatch',
+        'sale_total_overflow','invalid_sale_inventory_event','invalid_or_duplicate_sale_product',
+        'insufficient_stock','invalid_inventory_event_type','invalid_inventory_direction',
+        'invalid_inventory_quantity','invalid_inventory_unit_cost','opening_stock_permission_required',
+      ]);
+      const terminalByMessage=terminalMessages.has(message)||message.startsWith('invalid_')||
+        message.endsWith('_access_denied')||message.endsWith('_ownership_check_failed')||
+        message.endsWith('_collision')||message.endsWith('_permission_required');
+      const terminalDatabaseConstraint=errorCode.startsWith('22')||errorCode.startsWith('23');
+      const rejected=!conflict&&(terminalByMessage||terminalDatabaseConstraint);
       results.push({ id: op.id, ok: false, conflict, rejected, error: message });
     } finally {
       await pool.end();

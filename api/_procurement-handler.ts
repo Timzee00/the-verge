@@ -346,10 +346,12 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
       const anyReceived=Number(totalReceived.rows[0]?.received??0)>0;
       const status=complete?'received':anyReceived?'partially_received':'ordered';
       await pool.query('update purchase_orders set status=$2,updated_at=now() where id=$1',[orderId,status]);
-      await postPurchaseReceiptJournal(pool,{
-        organizationId,locationId,sourceId:receiptId,occurredAt:receivedAt,createdBy:user.id,
-        totalCostMinor:totalCost,supplierName:String(order.supplier_name),
-      });
+      if(totalCost>0) {
+        await postPurchaseReceiptJournal(pool,{
+          organizationId,locationId,sourceId:receiptId,occurredAt:receivedAt,createdBy:user.id,
+          totalCostMinor:totalCost,supplierName:String(order.supplier_name),
+        });
+      }
       await pool.query(`insert into audit_events (organization_id,actor_user_id,action,entity_type,entity_id,after_data,reason)
         values ($1,$2,'purchase_order.received','purchase_order',$3,$4::jsonb,'Supplier delivery received and inventory updated')`,
         [organizationId,user.id,orderId,JSON.stringify({receiptId,totalCostMinor:totalCost,status,items:receiptLines})]);
@@ -491,12 +493,14 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
         );
       }
       const occurredAt=new Date().toISOString();
-      await postTransferJournal(pool,{
-        organizationId,
-        locationId:stage==='dispatch'?String(transfer.from_location_id):String(transfer.to_location_id),
-        sourceId:eventId,occurredAt,createdBy:user.id,transferCostMinor:totalCost,
-        reference:String(transfer.reference),stage,
-      });
+      if(totalCost>0) {
+        await postTransferJournal(pool,{
+          organizationId,
+          locationId:stage==='dispatch'?String(transfer.from_location_id):String(transfer.to_location_id),
+          sourceId:eventId,occurredAt,createdBy:user.id,transferCostMinor:totalCost,
+          reference:String(transfer.reference),stage,
+        });
+      }
       const nextStatus=stage==='dispatch'?'dispatched':'received';
       await pool.query(
         `update stock_transfers set status=$2,updated_at=$3,

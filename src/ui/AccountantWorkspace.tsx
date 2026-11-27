@@ -58,10 +58,10 @@ export default function AccountantWorkspace(props: Props) {
   const visibleJournalLines = useMemo(() => journalLines.filter(line => locationJournalIds.has(line.journalEntryId)), [journalLines, locationJournalIds]);
   const branchBalances = useMemo(() => balances.filter(row => row.locationId === locationId || row.locationId === null), [balances, locationId]);
   const accountBalances = useMemo(() => branchBalances.reduce((map,row) => {
-    const current=map.get(row.accountId)??{debitMinor:0,creditMinor:0};
+    const current=map.get(row.accountId)??{accountCode:row.accountCode,accountName:row.accountName,normalBalance:row.normalBalance,class:row.class,debitMinor:0,creditMinor:0};
     current.debitMinor+=row.debitMinor;current.creditMinor+=row.creditMinor;
     map.set(row.accountId,current);return map;
-  },new Map<string,{debitMinor:number;creditMinor:number}>()),[branchBalances]);
+  },new Map<string,{accountCode:string;accountName:string;normalBalance:string;class:string;debitMinor:number;creditMinor:number}>()),[branchBalances]);
   const trialTotals = useMemo(() => {
     let debitMinor=0,creditMinor=0;
     for(const row of branchBalances){debitMinor+=row.debitMinor;creditMinor+=row.creditMinor;}
@@ -164,14 +164,13 @@ export default function AccountantWorkspace(props: Props) {
           <article><span>Total credits</span><strong>{money(trialTotals.creditMinor)}</strong></article>
         </div>
         <div className="accountant-record-list">
-          {Array.from(accountBalances.entries()).map(([accountId,balance])=>{
-            const account=undefined;
-            return <article key={accountId}>
-              <div><strong>{accountId}</strong><small>Ledger account</small></div>
+          {Array.from(accountBalances.entries()).sort((a,b)=>a[1].accountCode.localeCompare(b[1].accountCode)).map(([accountId,balance])=>
+            <article key={accountId}>
+              <div><strong>{balance.accountCode} · {balance.accountName}</strong><small>{balance.class} · normal {balance.normalBalance}</small></div>
               <div className="accountant-record-amount"><strong>{money(balance.debitMinor)}</strong><small>Debit</small></div>
               <div className="accountant-record-amount"><strong>{money(balance.creditMinor)}</strong><small>Credit</small></div>
-            </article>;
-          })}
+            </article>
+          )}
           {!accountBalances.size&&<div className="staff-empty">No posted balances are recorded for this location yet.</div>}
         </div>
         <p className="accountant-disclaimer">Balances are computed from all posted journals returned by the server, not just the 30 most recently displayed entries.</p>

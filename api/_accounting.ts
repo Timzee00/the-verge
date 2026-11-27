@@ -1,4 +1,4 @@
-import { assertBalanced, buildExpenseJournalLines, buildPurchaseJournalLines, buildSaleJournalLines, buildTransferJournalLines } from '../src/domain/accounting.js';
+import { assertBalanced, buildExpenseJournalLines, buildOpeningInventoryJournalLines, buildPurchaseJournalLines, buildSaleJournalLines, buildTransferJournalLines } from '../src/domain/accounting.js';
 
 type QueryClient = {
   query: (text: string, values?: unknown[]) => Promise<{ rows: any[]; rowCount: number | null }>;
@@ -174,6 +174,27 @@ export async function postExpenseJournal(
     organizationId: input.organizationId, locationId: input.locationId, sourceType: 'expense',
     sourceId: input.sourceId, description: `${input.category}: ${input.description}`.slice(0, 240),
     occurredAt: input.occurredAt, createdBy: input.createdBy, lines,
+  });
+}
+
+export async function postOpeningInventoryJournal(
+  client: QueryClient,
+  input: {
+    organizationId: string; locationId: string; sourceId: string; occurredAt: string; createdBy: string;
+    totalCostMinor: number; description?: string;
+  },
+) {
+  if(input.totalCostMinor<=0)return {id:'',created:false};
+  const accounts=await ensureAccountingAccounts(client,input.organizationId);
+  const lines:JournalLineInput[]=buildOpeningInventoryJournalLines({
+    inventoryAccountId:accounts['1200'],
+    equityAccountId:accounts['3000'],
+    amountMinor:input.totalCostMinor,
+  }).map((line,index)=>({...line,memo:index===0?'Opening inventory received':'Opening owner contribution'}));
+  return createPostedJournal(client,{
+    organizationId:input.organizationId,locationId:input.locationId,sourceType:'opening',
+    sourceId:input.sourceId,description:input.description??'Opening inventory balance',
+    occurredAt:input.occurredAt,createdBy:input.createdBy,lines,
   });
 }
 

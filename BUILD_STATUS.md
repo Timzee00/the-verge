@@ -1,42 +1,61 @@
-# The Verge v0.5.0 build status
+# The Verge — Build status
+**Snapshot:** 27 November 2026  
+**Repository:** `Timzee00/the-verge`  
+**Branch:** `main`  
+**Latest reviewed commit:** `e88cca8e88916e0bc7a644056303e2ebf6fae622`
 
-## Verified in this environment
-- Domain TypeScript compilation using the installed TypeScript 5.8.3 compiler.
-- Domain test suite: passed.
-- Money is stored/calculated in integer minor units.
-- Journal entries are validated as balanced double-entry structures.
-- Role permission matrix compiles and is tested.
-- Portable account export envelope validation compiles and is tested.
+## Current verified state
 
-## Not claimed as verified here
-- Full `npm run build`: npm dependency installation timed out in the build environment, so the full Vite build was not falsely marked as passing.
-- Live Supabase authentication/synchronization: schema foundation exists; production RPCs/idempotency and cloud adapter are the next implementation milestone.
-- Live WhatsApp/payment provider integrations: not yet connected.
+The current main branch contains the following working-code foundations:
+
+- Vercel API authentication, session lookup, organisation membership checks and server-side role checks.
+- Organisation-scoped products, customers, sales, inventory events and expense sync.
+- Explicit staff-to-location assignments and server-side location checks for inventory, sales and expenses.
+- Offline IndexedDB outbox, paginated pull cursors, retry timestamps and idempotent sync receipts.
+- Cashier POS workspace.
+- Inventory staff workspace with assigned-location stock visibility, stock receipt capture, barcode/spreadsheet tools and offline sync.
+- Accountant workspace with selected-location expense entry and sales/expense review.
+- Owner accounting screen with business expense entry and recent expense review.
+- Shared inventory movement validation and server-side checks against negative stock for destructive movements.
+- Fail-closed UI role fallback when no active membership is found.
+
+## Build evidence
+
+- Vercel built commit `aa5b6f68128b983eacbd5973e0a4f90ed91b6c2c` using `tsc -b && vite build`; the captured log showed Vite completing successfully with no TypeScript diagnostics.
+- That build followed the fix to the API import path for the shared inventory movement validator.
+- Subsequent commits changed the expense index migration, selected-location summaries, and atomic sequence allocation in inventory receipt/import flows.
+- A Vercel deployment for the latest reviewed commit `e88cca8e88916e0bc7a644056303e2ebf6fae622` was created but its deployment state had not yet reached a final ready state when this status was written.
+
+## Tests not yet confirmed
+
+- `npm run test:domain` after the latest inventory movement test additions: **NOT RUN in this verification pass**.
+- GitHub Actions run for the latest commit: **no workflow run was returned**.
+- Browser smoke tests across owner, cashier, inventory staff and accountant accounts: **NOT RUN**.
+- Offline/reconnect tests on real devices: **NOT RUN**.
+- Multi-organisation and multi-location isolation tests using separate accounts: **NOT RUN**.
+
+## Database and environment status
+
+- Migration `db/migrations/005_expense_sync_indexes.sql` is committed. It adds organisation/time and organisation/location/time indexes to support the paginated expense feed.
+- The migration has **not** been applied to Preview or Production through this session.
+- No production database records, production secrets or environment variables were changed.
+- Production credentials and provider integrations were not inspected or modified.
+
+## Release blockers
+
+Do not describe this build as production-ready until these items are completed:
+
+1. Apply all outstanding database migrations to an isolated Preview database, then Production after validation.
+2. Complete registration, email, login, workspace selection and branch isolation browser smoke tests.
+3. Test cashier sales, stock receipts, expense sync, offline/reconnect and duplicate/retry behavior across separate devices.
+4. Finish location creation/edit/archive controls and business profile management.
+5. Post expenses and other operational records into balanced double-entry journals; the current expense feature is an operational expense ledger, not an automatic accounting-posting engine.
+6. Complete supplier purchasing, transfer workflows and pharmacy batch/expiry/recall enforcement before advertising pharmacy-grade support.
+7. Review personal-finance local data scoping for shared devices and complete generic `staff` role behavior.
+8. Confirm GitHub Actions and the latest Vercel deployment are green, then run a production smoke test.
 
 ## Product identity
-The application is branded **THE VERGE — Powered by Timzee Corp**.
 
+**THE VERGE — Powered by Timzee Corp**
 
-## 1.0.0 — Pilot server foundation
-
-- Server-backed account registration, login, session lookup, and logout via Vercel API routes.
-- Passwords are hashed server-side with PBKDF2; the browser never stores the password hash.
-- Pilot sessions use an HttpOnly SameSite cookie.
-- Neon now includes user credentials/sessions, sync receipts, customers, sales, sale items, and expenses.
-- Organization membership is checked before sync reads/writes.
-- Inventory, product, customer, sale, and expense sync endpoints are present; duplicate device sequence numbers are deduplicated server-side.
-- Cross-device pull includes products, locations, inventory events, and sales.
-- Active deployment target remains Vercel + Neon. No production deployment has been claimed yet.
-- Full dependency-based build is still blocked in this environment because npm install times out; domain tests pass and the API layer passes isolated TypeScript checking with connector type shims.
-
-
-## Milestone 1.0 production-candidate hardening
-- Real Postgres transaction semantics for registration and sync writes.
-- Persistent per-browser device ID and IndexedDB-backed local sequence reservation.
-- Server-side inventory conflict protection for offline sales.
-- Sale sync can atomically persist sale + sale items + inventory event.
-- Conflict/rejected sync states now surface in local records.
-- Node.js 24 pinned for Vercel.
-- CI workflow added for typecheck, domain tests, and build.
-
-Validation in this environment: domain tests PASS; API source validation PASS with lightweight dependency declarations. Full dependency install/build remains blocked by an environment package-install timeout, so a live Vercel smoke test is still required before inviting real users.
+The product is intended as a local-first Nigerian SME business operating system. Current code is a production candidate, not a certified production release.

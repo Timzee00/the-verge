@@ -185,6 +185,22 @@ export default function ProcurementWorkspace({organizationId,locations,products,
     finally {setBusy(false);}
   }
 
+  async function cancelPurchaseOrder(order:PurchaseOrderRecord) {
+    if(busy||!window.confirm('Cancel '+order.reference+'? Orders with receipts cannot be cancelled.'))return;
+    setBusy(true);setError('');setNotice('');
+    try { await api.procurementAction({organizationId,action:'cancel_purchase_order',purchaseOrderId:order.id}); await refreshAfterChange('Purchase order cancelled.'); }
+    catch(err) {setError(err instanceof Error?err.message:'Purchase order could not be cancelled.');}
+    finally {setBusy(false);}
+  }
+
+  async function cancelTransfer(transfer:StockTransferRecord) {
+    if(busy||!window.confirm('Cancel draft '+transfer.reference+'? No stock has been dispatched yet.'))return;
+    setBusy(true);setError('');setNotice('');
+    try { await api.procurementAction({organizationId,action:'cancel_transfer',transferId:transfer.id}); await refreshAfterChange('Draft transfer cancelled.'); }
+    catch(err) {setError(err instanceof Error?err.message:'Transfer could not be cancelled.');}
+    finally {setBusy(false);}
+  }
+
   async function createTransfer(event:FormEvent<HTMLFormElement>) {
     event.preventDefault();if(busy||!snapshot?.canManage)return;
     setBusy(true);setError('');setNotice('');
@@ -302,10 +318,20 @@ export default function ProcurementWorkspace({organizationId,locations,products,
               </div>;
             })}
             {pending&&snapshot?.canManage&&<div className="procurement-order-footer"><span>Remaining lines can be received in multiple deliveries.</span><button type="button" className="primary" disabled={busy} onClick={()=>void receivePurchaseOrder(order)}>Record delivery</button></div>}
+          {order.status==='ordered'&&items.every(item=>item.quantityReceived===0)&&snapshot?.canManage&&<div className="procurement-order-footer"><span>This order has not been received and can be cancelled.</span><button type="button" className="secondary" disabled={busy} onClick={()=>void cancelPurchaseOrder(order)}>Cancel order</button></div>}
           </article>;
         })}
         {!snapshot?.purchaseOrders.length&&<div className="procurement-empty">No purchase orders yet. Create an order to record an expected supplier delivery.</div>}
       </div>
+      <section className="procurement-receipt-history">
+        <div className="procurement-form-heading"><div><strong>Recent goods receipts</strong><small>Each receipt updates branch stock and posts a supplier payable journal when the received value is positive.</small></div></div>
+        {(snapshot?.purchaseReceipts??[]).length ? <div className="procurement-list">{snapshot!.purchaseReceipts.slice(0,20).map(receipt=>{
+          const order=snapshot!.purchaseOrders.find(item=>item.id===receipt.purchaseOrderId);
+          const supplier=snapshot!.suppliers.find(item=>item.id===receipt.supplierId);
+          const location=locations.find(item=>item.id===receipt.locationId);
+          return <article className="procurement-list-card" key={receipt.id}><div><strong>{order?.reference??'Purchase receipt'} · {money(receipt.totalCostMinor)}</strong><small>{supplier?.name??'Supplier'} · {location?.name??'Location'} · {dateLabel(receipt.receivedAt)}</small></div><span className="procurement-status received">Received</span></article>;
+        })}</div> : <div className="procurement-empty">No goods receipts have been recorded.</div>}
+      </section>
     </div>}
 
     {section==='transfers'&&<div className="procurement-content">
@@ -331,6 +357,7 @@ export default function ProcurementWorkspace({organizationId,locations,products,
           <div className="procurement-order-header"><div><strong>{transfer.reference}</strong><small>{transfer.fromLocationName} → {transfer.toLocationName} · {dateLabel(transfer.createdAt)}</small></div><span className={'procurement-status '+transfer.status}>{transfer.status}</span></div>
           {transferItems(transfer).map(item=><div className="procurement-order-line" key={item.id}><div><strong>{item.productName}</strong><small>{item.sku} · {item.quantity.toLocaleString('en-NG')} units · {money(item.unitCostMinor)} unit cost</small></div></div>)}
           {transfer.status==='draft'&&<div className="procurement-order-footer"><span>Dispatch deducts stock from the source and records in-transit value.</span><button type="button" className="primary" disabled={busy} onClick={()=>void advanceTransfer(transfer,'dispatch_transfer')}>Dispatch</button></div>}
+          {transfer.status==='draft'&&snapshot?.canManage&&<div className="procurement-order-footer"><span>A draft transfer has not changed stock and can be cancelled.</span><button type="button" className="secondary" disabled={busy} onClick={()=>void cancelTransfer(transfer)}>Cancel draft</button></div>}
           {transfer.status==='dispatched'&&<div className="procurement-order-footer"><span>Stock is in transit. Confirm the received quantity at destination before closing the transfer.</span><button type="button" className="primary" disabled={busy} onClick={()=>void advanceTransfer(transfer,'receive_transfer')}>Confirm receipt</button></div>}
           {transfer.status==='received'&&<div className="procurement-order-footer"><span>Received at destination{transfer.receivedAt?' · '+dateLabel(transfer.receivedAt):''}</span></div>}
         </article>)}

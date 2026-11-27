@@ -65,7 +65,7 @@ export default function App(){
     receivedServerLocations=true;
     await localDB.locations.bulkPut(remote.locations);
     visibleLocations=remote.locations.filter(location=>location.active);
-    if(OWNER_ROLES_FOR_REFRESH.has(currentRole)){
+    if(['business_owner','platform_admin'].includes(currentRole)){
      await localDB.meta.put({key:`allowedLocations:${orgId}`,value:JSON.stringify(visibleLocations.map(location=>location.id).sort())});
     }
    }catch{

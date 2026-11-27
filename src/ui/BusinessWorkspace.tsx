@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { BusinessLocation, BusinessProfile } from '../api';
 import { api } from '../api';
+import type { Product } from '../core/types';
+import ProcurementWorkspace from './ProcurementWorkspace';
 
 type Props = {
   organizationId: string;
   organizationName: string;
+  products: Product[];
   onBusinessChanged: (business: BusinessProfile) => void;
   onRefresh: () => Promise<void>;
 };
@@ -27,7 +30,7 @@ function makeDraft(location?:BusinessLocation):LocationDraft {
   } : {...EMPTY_LOCATION};
 }
 
-export default function BusinessWorkspace({organizationId,organizationName,onBusinessChanged,onRefresh}:Props) {
+export default function BusinessWorkspace({organizationId,organizationName,products,onBusinessChanged,onRefresh}:Props) {
   const [business,setBusiness]=useState<BusinessProfile|null>(null);
   const [locations,setLocations]=useState<BusinessLocation[]>([]);
   const [canManage,setCanManage]=useState(false);
@@ -166,6 +169,8 @@ export default function BusinessWorkspace({organizationId,organizationName,onBus
       </div>
       {archivedLocations.length>0&&<details className="business-archived"><summary>Archived locations ({archivedLocations.length})</summary><div className="business-location-list">{archivedLocations.map(location=><article className="business-location-card archived" key={location.id}><div className="business-location-main"><span className="business-location-icon" aria-hidden="true">A</span><div><div className="business-location-title"><strong>{location.name}</strong><span className="business-location-status archived">Archived</span></div><small>{location.type}{location.code?' · '+location.code:''}</small></div></div>{canManage&&<button type="button" className="secondary" disabled={savingLocation} onClick={()=>void changeLocationAvailability(location,'restore')}>Restore</button>}</article>)}</div></details>}
     </section>
+
+    <ProcurementWorkspace organizationId={organizationId} locations={activeLocations} products={products} onRefresh={onRefresh}/>
 
     {showLocationForm&&<div className="business-modal-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowLocationForm(false);}}>
       <section className="business-location-modal" role="dialog" aria-modal="true" aria-labelledby="business-location-title">

@@ -134,3 +134,10 @@ CREATE TABLE IF NOT EXISTS stock_transfer_events (
   occurred_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (transfer_id, action)
 );
+
+
+-- Ensure existing organisations also have the stock-in-transit asset account.
+INSERT INTO ledger_accounts (id,organization_id,code,name,account_class,normal_balance,active)
+SELECT gen_random_uuid(),o.id,'1210','Inventory in Transit','asset','debit',true
+FROM organizations o
+ON CONFLICT (organization_id,code) DO NOTHING;

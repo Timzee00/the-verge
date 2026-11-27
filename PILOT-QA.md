@@ -64,3 +64,12 @@ Record device, browser, exact steps, expected result, actual result, and whether
 - [ ] Attempt cross-organisation product, customer, expense and inventory identifiers; all must be rejected.
 - [ ] Attempt a destructive inventory movement that would take stock below zero; the server must reject it under concurrent checkout load.
 - [ ] Verify the migration indexes are present after applying migration 005 in Preview.
+
+
+## Final review addendum — opening balances and payable recovery
+- [ ] Record initial stock as owner/admin; verify opening inventory journal balances inventory against owner equity.
+- [ ] Verify a cashier/inventory staff member cannot create or sync opening stock.
+- [ ] Record two partial supplier payments against the same receipt; verify the receipt outstanding amount is exact.
+- [ ] Lose the response after a supplier payment commits, reload, and retry the original request; confirm one payment and one journal.
+- [ ] Confirm a pending supplier payment blocks a second payment until its original idempotency key is confirmed.
+- [ ] Verify a missing migration/schema column leaves a sync operation retryable rather than permanently rejected.

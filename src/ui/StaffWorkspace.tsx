@@ -5,6 +5,7 @@ import { localDB } from '../db/local';
 import { getLocalStock } from '../inventory/ledger';
 import { calculateCartTotals } from '../domain/pos';
 import './staff-workspace.css';
+import InventoryStaffWorkspace from './InventoryStaffWorkspace';
 
 const BarcodeScanner = lazy(() => import('../inventory/BarcodeScanner'));
 type PaymentMethod = Sale['paymentMethod'];
@@ -14,6 +15,8 @@ type Receipt = { sale: Sale; lines: Array<{ product: Product; quantity: number; 
 
 type Props = {
   role: string;
+  deviceId: string;
+  onRefresh: () => Promise<void>;
   userId: string;
   userEmail: string;
   organizationId: string;
@@ -62,6 +65,7 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
 }
 
 export default function StaffWorkspace(props: Props) {
+  if (props.role === 'inventory_staff') return <InventoryStaffWorkspace {...props}/>;
   if (props.role !== 'cashier') {
     return <div className="staff-shell">
       <header className="staff-header"><div className="staff-brand"><span className="staff-brand-mark">V</span><span><strong>THE VERGE</strong><small>Staff workspace</small></span></div><button className="staff-logout" onClick={() => void props.onLogout()}><Icon name="logout"/> Sign out</button></header>

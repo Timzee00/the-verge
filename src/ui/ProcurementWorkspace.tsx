@@ -27,6 +27,7 @@ export default function ProcurementWorkspace({organizationId,locations,products,
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
   const [notice,setNotice]=useState('');
+  const [editingSupplierId,setEditingSupplierId]=useState('');
   const [supplierName,setSupplierName]=useState('');
   const [supplierPhone,setSupplierPhone]=useState('');
   const [supplierEmail,setSupplierEmail]=useState('');
@@ -87,11 +88,19 @@ export default function ProcurementWorkspace({organizationId,locations,products,
     event.preventDefault();if(busy||!snapshot?.canManage)return;
     setBusy(true);setError('');setNotice('');
     try {
-      await api.procurementAction({organizationId,action:'create_supplier',name:supplierName,phone:supplierPhone,email:supplierEmail,addressLine1:supplierAddress});
-      setSupplierName('');setSupplierPhone('');setSupplierEmail('');setSupplierAddress('');
-      await refreshAfterChange('Supplier saved.');
+      await api.procurementAction({organizationId,action:editingSupplierId?'update_supplier':'create_supplier',...(editingSupplierId?{supplierId:editingSupplierId}:{}),name:supplierName,phone:supplierPhone,email:supplierEmail,addressLine1:supplierAddress});
+      setEditingSupplierId('');setSupplierName('');setSupplierPhone('');setSupplierEmail('');setSupplierAddress('');
+      await refreshAfterChange(editingSupplierId?'Supplier details updated.':'Supplier saved.');
     } catch(err) {setError(err instanceof Error?err.message:'Supplier could not be saved.');}
     finally {setBusy(false);}
+  }
+
+  function editSupplier(supplier:ProcurementSnapshot['suppliers'][number]) {
+    setEditingSupplierId(supplier.id);
+    setSupplierName(supplier.name);
+    setSupplierPhone(supplier.phone);
+    setSupplierEmail(supplier.email);
+    setSupplierAddress(supplier.addressLine1);
   }
 
   async function changeSupplier(supplierId:string,action:'archive_supplier'|'restore_supplier') {
@@ -129,9 +138,27 @@ export default function ProcurementWorkspace({organizationId,locations,products,
     setBusy(true);setError('');setNotice('');
     try {
       const keyName=`purchaseReceiptKey:${organizationId}:${order.id}`;
+      const requestPayload=JSON.stringify(items.slice().sort((a,b)=>a.purchaseOrderItemId.localeCompare(b.purchaseOrderItemId)));
       const savedKey=await localDB.meta.get(keyName);
-      const idempotencyKey=savedKey?.value??crypto.randomUUID();
-      if(!savedKey)await localDB.meta.put({key:keyName,value:idempotencyKey});
+      let idempotencyKey:string;
+      if(savedKey) {
+        let stored:{id:string;payload:string}|null=null;
+        try { stored=JSON.parse(savedKey.value) as {id:string;payload:string}; } catch { stored=null; }
+        if(stored?.id&&stored.payload) {
+          idempotencyKey=stored.id;
+          if(stored.payload!==requestPayload) {
+            const original=JSON.parse(stored.payload) as Array<{purchaseOrderItemId:string;quantityReceived:number}>;
+            setReceiveDrafts(previous=>({...previous,[order.id]:{...(previous[order.id]??{}),...Object.fromEntries(original.map(item=>[item.purchaseOrderItemId,String(item.quantityReceived)]))}}));
+            throw new Error('A previous receipt attempt is awaiting confirmation. The original quantities have been restored; retry those exact quantities before creating another receipt.');
+          }
+        } else {
+          idempotencyKey=savedKey.value;
+          await localDB.meta.put({key:keyName,value:JSON.stringify({id:idempotencyKey,payload:requestPayload})});
+        }
+      } else {
+        idempotencyKey=crypto.randomUUID();
+        await localDB.meta.put({key:keyName,value:JSON.stringify({id:idempotencyKey,payload:requestPayload})});
+      }
       const result=await api.procurementAction({organizationId,action:'receive_purchase_order',purchaseOrderId:order.id,idempotencyKey,items});
       await localDB.meta.delete(keyName);
       await refreshAfterChange(`Goods received. Receipt ${result.receipt?.id??''} is recorded and the inventory ledger has been updated.`);
@@ -187,17 +214,17 @@ export default function ProcurementWorkspace({organizationId,locations,products,
 
     {section==='suppliers'&&<div className="procurement-content">
       {snapshot?.canManage&&<form className="procurement-form supplier-form" onSubmit={createSupplier}>
-        <div className="procurement-form-heading"><div><strong>Add supplier</strong><small>Supplier records are shared by all locations in this business.</small></div></div>
+        <div className="procurement-form-heading"><div><strong>{editingSupplierId?'Edit supplier':'Add supplier'}</strong><small>Supplier records are shared by all locations in this business.</small></div></div>
         <label>Supplier name<input required maxLength={140} value={supplierName} onChange={e=>setSupplierName(e.target.value)} placeholder="Supplier or company name"/></label>
         <label>Phone<input type="tel" maxLength={40} value={supplierPhone} onChange={e=>setSupplierPhone(e.target.value)} placeholder="+234…"/></label>
         <label>Email<input type="email" maxLength={320} value={supplierEmail} onChange={e=>setSupplierEmail(e.target.value)} placeholder="orders@supplier.com"/></label>
         <label>Address<input maxLength={160} value={supplierAddress} onChange={e=>setSupplierAddress(e.target.value)} placeholder="Street or business address"/></label>
-        <button className="primary" type="submit" disabled={busy||!supplierName.trim()}>{busy?'Saving…':'Save supplier'}</button>
+        <div className="supplier-form-actions"><button className="primary" type="submit" disabled={busy||!supplierName.trim()}>{busy?'Saving…':editingSupplierId?'Save supplier changes':'Save supplier'}</button>{editingSupplierId&&<button type="button" className="secondary" disabled={busy} onClick={()=>{setEditingSupplierId('');setSupplierName('');setSupplierPhone('');setSupplierEmail('');setSupplierAddress('');}}>Cancel edit</button>}</div>
       </form>}
       <div className="procurement-list">
         {(snapshot?.suppliers??[]).map(supplier=><article className="procurement-list-card" key={supplier.id}>
           <div><strong>{supplier.name}</strong><small>{[supplier.phone,supplier.email,supplier.addressLine1].filter(Boolean).join(' · ')||'No contact details'}</small></div>
-          <div className="procurement-actions"><span className={supplier.active?'procurement-status active':'procurement-status inactive'}>{supplier.active?'Active':'Archived'}</span>{snapshot?.canManage&&<button type="button" className="secondary" disabled={busy} onClick={()=>void changeSupplier(supplier.id,supplier.active?'archive_supplier':'restore_supplier')}>{supplier.active?'Archive':'Restore'}</button>}</div>
+          <div className="procurement-actions"><span className={supplier.active?'procurement-status active':'procurement-status inactive'}>{supplier.active?'Active':'Archived'}</span>{snapshot?.canManage&&<>{supplier.active&&<button type="button" className="secondary" disabled={busy} onClick={()=>editSupplier(supplier)}>Edit</button>}<button type="button" className="secondary" disabled={busy} onClick={()=>void changeSupplier(supplier.id,supplier.active?'archive_supplier':'restore_supplier')}>{supplier.active?'Archive':'Restore'}</button></>}</div>
         </article>)}
         {!snapshot?.suppliers.length&&<div className="procurement-empty">No suppliers have been added yet.</div>}
       </div>

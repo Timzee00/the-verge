@@ -160,6 +160,21 @@ export async function handleLocations(req: VercelRequest, res: VercelResponse) {
         [organizationId,locationId],
       );
       if (children.rowCount) { await pool.query('ROLLBACK'); return json(res, 409, { error: 'archive_child_locations_first' }); }
+      const openOrders = await pool.query(
+        `select 1 from purchase_orders
+         where organization_id=$1 and location_id=$2 and status in ('ordered','partially_received')
+         limit 1`,
+        [organizationId,locationId],
+      );
+      if (openOrders.rowCount) { await pool.query('ROLLBACK'); return json(res,409,{error:'complete_or_cancel_open_purchase_orders_first'}); }
+      const openTransfers = await pool.query(
+        `select 1 from stock_transfers
+         where organization_id=$1 and status in ('draft','dispatched')
+           and (from_location_id=$2 or to_location_id=$2)
+         limit 1`,
+        [organizationId,locationId],
+      );
+      if (openTransfers.rowCount) { await pool.query('ROLLBACK'); return json(res,409,{error:'complete_or_cancel_open_transfers_first'}); }
       const assigned = await pool.query(
         `select 1 from membership_locations ml join memberships m
            on m.organization_id=ml.organization_id and m.user_id=ml.user_id

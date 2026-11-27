@@ -39,6 +39,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const membership = await sql`select role from memberships where organization_id=${organizationId} and user_id=${user.id} and active=true limit 1`;
   if (!membership.length) return json(res, 403, { error: 'forbidden' });
   const role = String(membership[0].role);
+  const organizationWide = ['business_owner', 'platform_admin'].includes(role);
+  const assignedRows = organizationWide ? [] : await sql`select location_id from membership_locations where organization_id=${organizationId} and user_id=${user.id}`;
+  const assignedLocationIds = new Set(assignedRows.map((row:any)=>String(row.location_id)));
+  const canAccessLocation = (locationId: unknown) => organizationWide || (typeof locationId==='string' && assignedLocationIds.has(locationId));
 
   const results: any[] = [];
   for (const op of operations) {
@@ -68,6 +72,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (op.entity === 'inventory_event') {
         const owned = await pool.query('select p.id from products p join locations l on l.id=$2 and l.organization_id=$3 where p.id=$1 and p.organization_id=$3 limit 1', [p.productId, p.locationId, organizationId]);
         if (!owned.rowCount) throw new Error('ownership_check_failed');
+        if (!canAccessLocation(p.locationId)) throw new Error('location_access_denied');
 
         if (p.type === 'sale') throw new Error('sale_requires_pos_transaction');
         if (!Number.isFinite(Number(p.quantityDelta)) || Number(p.quantityDelta) === 0) throw new Error('invalid_inventory_quantity');
@@ -95,6 +100,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const location = await pool.query('select 1 from locations where id=$1 and organization_id=$2 and active=true limit 1', [sale.locationId, organizationId]);
         if (!location.rowCount) throw new Error('ownership_check_failed');
+        if (!canAccessLocation(sale.locationId)) throw new Error('location_access_denied');
         if (sale.customerId) {
           const customer = await pool.query('select 1 from customers where id=$1 and organization_id=$2 and active=true limit 1', [sale.customerId, organizationId]);
           if (!customer.rowCount) throw new Error('customer_ownership_check_failed');
@@ -181,9 +187,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } else {
         const expense = p;
         if (!expense.id || !expense.category || !expense.description || !Number.isFinite(Number(expense.amountMinor)) || Number(expense.amountMinor) <= 0) throw new Error('invalid_expense_payload');
+        if (!organizationWide && !expense.locationId) throw new Error('expense_location_required');
         if (expense.locationId) {
           const location = await pool.query('select 1 from locations where id=$1 and organization_id=$2 limit 1', [expense.locationId, organizationId]);
           if (!location.rowCount) throw new Error('location_ownership_check_failed');
+          if (!canAccessLocation(expense.locationId)) throw new Error('location_access_denied');
         }
         await pool.query(`insert into expenses (id,organization_id,location_id,amount_minor,category,description,payment_method,occurred_at,device_id,created_at,created_by)
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) on conflict (id) do nothing`, [expense.id,organizationId,expense.locationId??null,expense.amountMinor,expense.category,expense.description,expense.paymentMethod,expense.occurredAt,expense.deviceId,expense.createdAt,user.id]);

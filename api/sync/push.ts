@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { db, transactionPool } from '../_db.js';
 import { json, method, requireUser } from '../_http.js';
 import { validateInventoryMovement } from '../../src/domain/inventory.js';
+import { postExpenseJournal, postSaleJournal } from '../_accounting.js';
 
 const ALLOWED = new Set(['inventory_event', 'product', 'customer', 'sale', 'expense']);
 const ENTITY_PERMISSION: Record<string, string> = {
@@ -200,11 +201,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               [organizationId,op.deviceId,event.localSequence,event.id]);
           }
         }
+
+        await postSaleJournal(pool, {
+          organizationId,
+          locationId: sale.locationId,
+          sourceId: sale.id,
+          occurredAt: sale.occurredAt,
+          createdBy: user.id,
+          paymentMethod: sale.paymentMethod,
+          totalMinor: subtotalMinor,
+          items: validatedItems.map(({ item, unitCostMinor }) => ({ quantity: item.quantity, unitCostMinor })),
+        });
       } else {
         const expense = p;
         if (expense.id !== op.entityId || expense.organizationId !== organizationId || expense.deviceId !== op.deviceId) throw new Error('invalid_expense_identity');
         if (!expense.id || typeof expense.category !== 'string' || !expense.category.trim() || typeof expense.description !== 'string' || !expense.description.trim() || !Number.isSafeInteger(Number(expense.amountMinor)) || Number(expense.amountMinor) <= 0 || !['cash','bank','transfer','card'].includes(String(expense.paymentMethod)) || typeof expense.occurredAt !== 'string') throw new Error('invalid_expense_payload');
-        if (!organizationWide && !expense.locationId) throw new Error('expense_location_required');
+        if (!expense.locationId) throw new Error('expense_location_required');
         if (expense.locationId) {
           const location = await pool.query('select 1 from locations where id=$1 and organization_id=$2 and active=true limit 1', [expense.locationId, organizationId]);
           if (!location.rowCount) throw new Error('location_ownership_check_failed');
@@ -212,6 +224,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         await pool.query(`insert into expenses (id,organization_id,location_id,amount_minor,category,description,payment_method,occurred_at,device_id,created_at,created_by)
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) on conflict (id) do nothing`, [expense.id,organizationId,expense.locationId??null,expense.amountMinor,expense.category,expense.description,expense.paymentMethod,expense.occurredAt,expense.deviceId,expense.createdAt,user.id]);
+        await postExpenseJournal(pool, {
+          organizationId,
+          locationId: expense.locationId,
+          sourceId: expense.id,
+          occurredAt: expense.occurredAt,
+          createdBy: user.id,
+          paymentMethod: expense.paymentMethod,
+          amountMinor: Number(expense.amountMinor),
+          category: expense.category.trim(),
+          description: expense.description.trim(),
+        });
       }
 
       await pool.query(`insert into sync_receipts (organization_id,device_id,local_sequence,entity_type,entity_id)

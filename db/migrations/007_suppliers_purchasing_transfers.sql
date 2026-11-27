@@ -141,3 +141,31 @@ INSERT INTO ledger_accounts (id,organization_id,code,name,account_class,normal_b
 SELECT gen_random_uuid(),o.id,'1210','Inventory in Transit','asset','debit',true
 FROM organizations o
 ON CONFLICT (organization_id,code) DO NOTHING;
+
+
+CREATE TABLE IF NOT EXISTS supplier_payments (
+  id uuid PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  supplier_id uuid NOT NULL REFERENCES suppliers(id) ON DELETE RESTRICT,
+  amount_minor bigint NOT NULL CHECK (amount_minor > 0),
+  payment_method text NOT NULL CHECK (payment_method IN ('cash','bank','transfer','card')),
+  reference text,
+  notes text,
+  occurred_at timestamptz NOT NULL,
+  created_by uuid REFERENCES app_users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (organization_id,id)
+);
+CREATE INDEX IF NOT EXISTS supplier_payments_org_supplier_date
+  ON supplier_payments (organization_id,supplier_id,occurred_at DESC,id);
+
+CREATE TABLE IF NOT EXISTS supplier_payment_allocations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  payment_id uuid NOT NULL REFERENCES supplier_payments(id) ON DELETE RESTRICT,
+  purchase_receipt_id uuid NOT NULL REFERENCES purchase_receipts(id) ON DELETE RESTRICT,
+  amount_minor bigint NOT NULL CHECK (amount_minor > 0),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (payment_id,purchase_receipt_id)
+);
+CREATE INDEX IF NOT EXISTS supplier_payment_allocations_receipt
+  ON supplier_payment_allocations (purchase_receipt_id,payment_id);

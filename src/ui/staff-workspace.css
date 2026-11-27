@@ -282,3 +282,41 @@
   .inventory-staff-receive-form { grid-template-columns: 1fr; }
   .inventory-staff-receive-form button { grid-column: auto; }
 }
+
+
+/* Accountant workspace */
+.accountant-main { display: grid; gap: 18px; }
+.accountant-stats { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; }
+.accountant-stats article { min-width: 0; display: grid; gap: 7px; padding: 16px 17px; border: 1px solid var(--staff-line); border-radius: 14px; background: var(--staff-surface); box-shadow: var(--staff-shadow); }
+.accountant-stats span, .accountant-stats small { color: var(--staff-muted); font-size: 10px; }
+.accountant-stats strong { overflow-wrap: anywhere; font-size: clamp(17px,2vw,23px); font-variant-numeric: tabular-nums; letter-spacing: -.035em; }
+.accountant-expense-panel, .accountant-records-panel { padding: 19px; }
+.accountant-expense-form { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); align-items: end; gap: 12px; }
+.accountant-expense-form label { display: grid; gap: 7px; color: var(--staff-muted); font-size: 10px; font-weight: 750; }
+.accountant-expense-form input, .accountant-expense-form select { width: 100%; min-width: 0; height: 42px; padding: 0 10px; border: 1px solid var(--staff-line); border-radius: 9px; background: #fff; color: var(--staff-text); font-size: 12px; }
+.accountant-description { grid-column: span 2; }
+.accountant-expense-form button { min-height: 42px; }
+.accountant-hint { margin: 10px 0 0; color: var(--staff-danger); font-size: 11px; }
+.accountant-records-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 13px; }
+.accountant-records-heading h2 { margin: 4px 0 0; font-size: 19px; }
+.accountant-records-heading > span { color: var(--staff-muted); font-size: 10px; }
+.accountant-record-list { display: grid; }
+.accountant-record-list article { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 2px; border-top: 1px solid var(--staff-line); }
+.accountant-record-list article > div:first-child { min-width: 0; display: grid; gap: 4px; }
+.accountant-record-list article strong { font-size: 12px; }
+.accountant-record-list article small { overflow-wrap: anywhere; color: var(--staff-muted); font-size: 10px; }
+.accountant-record-amount { flex: none; display: grid; justify-items: end; gap: 5px; }
+.staff-sync-pill { display: inline-flex; padding: 4px 7px; border-radius: 30px; background: #fff5e8; color: #9a5b12; font-size: 9px; font-weight: 750; white-space: nowrap; }
+.staff-sync-pill.is-synced { background: #edf8f1; color: #21734a; }
+.accountant-disclaimer { margin: 0; color: var(--staff-muted); font-size: 10px; line-height: 1.55; }
+@media (max-width: 760px) {
+  .accountant-stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .accountant-expense-form { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .accountant-description { grid-column: 1 / -1; }
+  .accountant-expense-form button { grid-column: 1 / -1; width: 100%; }
+}
+@media (max-width: 520px) {
+  .accountant-expense-panel, .accountant-records-panel { padding: 13px; }
+  .accountant-expense-form { grid-template-columns: 1fr; }
+  .accountant-description, .accountant-expense-form button { grid-column: auto; }
+}

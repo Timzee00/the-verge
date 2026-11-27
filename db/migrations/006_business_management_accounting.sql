@@ -29,6 +29,13 @@ ALTER TABLE locations
 ALTER TABLE journal_entries
   ADD COLUMN IF NOT EXISTS location_id uuid REFERENCES locations(id) ON DELETE SET NULL;
 
+-- Supplier settlements are a first-class journal source, not a generic transfer.
+ALTER TABLE journal_entries
+  DROP CONSTRAINT IF EXISTS journal_entries_source_type_check;
+ALTER TABLE journal_entries
+  ADD CONSTRAINT journal_entries_source_type_check
+  CHECK (source_type IN ('sale','purchase','expense','transfer','opening','supplier_payment','adjustment','other'));
+
 -- A source transaction can create only one journal in an organisation.
 -- This is the database-level idempotency boundary for posting/retries.
 CREATE UNIQUE INDEX IF NOT EXISTS journal_entries_source_unique

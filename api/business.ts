@@ -1,6 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { db, transactionPool } from './_db.js';
 import { cleanEmail, json, method, requireUser } from './_http.js';
+import { handleLocations } from './_locations-handler.js';
+import { handleAccounting } from './_accounting-handler.js';
 
 const OWNER_ROLES = new Set(['business_owner', 'platform_admin']);
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -35,6 +37,10 @@ function mapBusiness(row: any) {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const resource = String(req.query.resource ?? req.body?.resource ?? 'profile');
+  if (resource === 'locations') return handleLocations(req, res);
+  if (resource === 'accounting') return handleAccounting(req, res);
+  if (resource !== 'profile') return json(res, 400, { error: 'invalid_business_resource' });
   if (!method(req, res, ['GET', 'PATCH'])) return;
   const user = await requireUser(req, res);
   if (!user) return;

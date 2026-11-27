@@ -34,3 +34,8 @@ Apply `db/migrations/*.sql` through the migration workflow. Validate on an isola
 ## Current release status
 
 The unified glass UI is committed to GitHub main, but it is not yet live. Latest GitHub Actions run `46080702234` failed before job steps or logs were available, and Vercel's `timzee-deploy-format-test` check reports a build-rate-limit failure. The latest READY deployment is still on an older commit (`58cc1b9`). Do not treat the current source as released until CI passes, the exact main commit is deployed, and browser smoke tests pass.
+
+
+### Vercel quota confirmation — 28 November 2026
+- A direct Preview deployment attempt for the current main HEAD was rejected by Vercel with HTTP 402: `api-deployments-free-per-day`, more than 100 deployments in the current free daily allowance; retry window reported as 86,400 seconds.
+- No new deployment was created. Do not retry or change billing/plan settings without the user's direction.

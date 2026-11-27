@@ -129,6 +129,7 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
       purchaseOrderItems:orderItems.map(mapOrderItem),purchaseReceipts:receipts.map(mapReceipt),
       transfers:transfers.map(mapTransfer),transferItems:transferItems.map(mapTransferItem),
       canManage:MANAGE_ROLES.has(role),
+      canReceive:['business_owner','platform_admin','manager','inventory_staff'].includes(role),
     });
   }
 

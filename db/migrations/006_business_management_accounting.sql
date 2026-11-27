@@ -12,9 +12,11 @@ ALTER TABLE organizations
   ADD COLUMN IF NOT EXISTS postal_code text,
   ADD COLUMN IF NOT EXISTS website text,
   ADD COLUMN IF NOT EXISTS tax_identifier text,
-  ADD COLUMN IF NOT EXISTS logo_url text;
+  ADD COLUMN IF NOT EXISTS logo_url text,
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
 
 ALTER TABLE locations
+  ADD COLUMN IF NOT EXISTS code text,
   ADD COLUMN IF NOT EXISTS phone text,
   ADD COLUMN IF NOT EXISTS contact_email text,
   ADD COLUMN IF NOT EXISTS address_line1 text,

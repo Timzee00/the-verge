@@ -137,7 +137,7 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
       join purchase_receipts pr on pr.id=spa.purchase_receipt_id
       where sp.organization_id=${organizationId} and pr.location_id=any(${[...assigned]}::uuid[])
       order by sp.occurred_at desc,sp.id desc limit 100
-    `:[[]]:[];
+    ` :[]:[];
     const transfers=OWNER_ROLES.has(role)?await sql`
       select st.*,fl.name as from_location_name,tl.name as to_location_name
       from stock_transfers st join locations fl on fl.id=st.from_location_id join locations tl on tl.id=st.to_location_id

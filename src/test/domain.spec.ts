@@ -4,7 +4,7 @@ function deepEqual(a: unknown, b: unknown, message='deep equality failed') { equ
 function throws(fn: () => unknown) { let thrown = false; try { fn(); } catch { thrown = true; } assert(thrown, 'expected function to throw'); }
 import { assertBalanced, buildSaleJournalLines } from '../domain/accounting.js';
 import { parseMajorToMinor, formatMinor } from '../domain/money.js';
-import { calculateAvailable, validateSaleAgainstSnapshot } from '../domain/inventory.js';
+import { calculateAvailable, validateInventoryMovement, validateSaleAgainstSnapshot } from '../domain/inventory.js';
 import { deduplicateOperations, nextRetryAt } from '../domain/sync.js';
 import { calculateCartTotals } from '../domain/pos.js';
 
@@ -26,6 +26,13 @@ const available = calculateAvailable([
   { id:'2', organizationId:'o', locationId:'l', productId:'p', type:'reservation', quantityDelta:1, occurredAt:'2026-01-01T00:01:00.000Z', deviceId:'d1', localSequence:2, syncState:'synced', createdAt:'2026-01-01T00:01:00.000Z' },
 ], 'l', 'p');
 equal(available, 0);
+equal(validateInventoryMovement('purchase', 5), 5);
+equal(validateInventoryMovement('damage', -2), -2);
+equal(validateInventoryMovement('adjustment', -1), -1);
+throws(() => validateInventoryMovement('purchase', -1));
+throws(() => validateInventoryMovement('transfer_out', 1));
+throws(() => validateInventoryMovement('unknown', 1));
+throws(() => validateInventoryMovement('return', 1));
 deepEqual(validateSaleAgainstSnapshot(0, 1).reason, 'insufficient_stock');
 
 const ops = deduplicateOperations([

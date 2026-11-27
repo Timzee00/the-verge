@@ -101,9 +101,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!locationIds.length || locationIds.some(id=>! /^[0-9a-f-]{36}$/i.test(id))) { await pool.query('ROLLBACK'); return json(res, 400, { error: 'at_least_one_location_required' }); }
       const validLocations = await pool.query('select id from locations where organization_id=$1 and active=true and id=any($2::uuid[])', [organizationId,locationIds]);
       if (validLocations.rowCount !== locationIds.length) { await pool.query('ROLLBACK'); return json(res, 400, { error: 'invalid_staff_location' }); }
+      const previousLocations = await pool.query('select location_id from membership_locations where organization_id=$1 and user_id=$2 order by location_id', [organizationId,targetUserId]);
       await pool.query('delete from membership_locations where organization_id=$1 and user_id=$2', [organizationId,targetUserId]);
       for (const locationId of locationIds) await pool.query('insert into membership_locations (organization_id,user_id,location_id) values ($1,$2,$3)', [organizationId,targetUserId,locationId]);
-      await pool.query(`insert into audit_events (organization_id,actor_user_id,action,entity_type,entity_id,before_data,after_data,reason) values ($1,$2,'staff.locations_changed','membership',$3,$4::jsonb,$5::jsonb,'Owner-managed location access')`, [organizationId,user.id,targetUserId,JSON.stringify({locationAssignments:'previous'}),JSON.stringify({locationIds})]);
+      await pool.query(`insert into audit_events (organization_id,actor_user_id,action,entity_type,entity_id,before_data,after_data,reason) values ($1,$2,'staff.locations_changed','membership',$3,$4::jsonb,$5::jsonb,'Owner-managed location access')`, [organizationId,user.id,targetUserId,JSON.stringify({locationIds:previousLocations.rows.map((row:any)=>String(row.location_id))}),JSON.stringify({locationIds})]);
       await pool.query('COMMIT');
       return json(res,200,{staff:{userId:targetUserId,locationIds}});
     }

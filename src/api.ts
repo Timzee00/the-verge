@@ -1,4 +1,4 @@
-import type { Customer, Expense, InventoryEvent, Location, Product, SaleItem } from './core/types';
+import type { Customer, Expense, InventoryEvent, JournalEntry, JournalLine, LedgerAccount, Location, Product, SaleItem } from './core/types';
 
 async function request<T>(path:string, init:RequestInit={}):Promise<T>{
   const res=await fetch(path,{...init,credentials:'include',headers:{'Content-Type':'application/json',...(init.headers??{})}});
@@ -8,11 +8,20 @@ async function request<T>(path:string, init:RequestInit={}):Promise<T>{
 }
 
 export type SessionOrg={id:string;name:string;base_currency:string;industry?:string;role:string};
+export type BusinessProfile={id:string;name:string;baseCurrency:string;industry:string;legalName:string;contactEmail:string;phone:string;addressLine1:string;addressLine2:string;city:string;state:string;postalCode:string;website:string;taxIdentifier:string;logoUrl:string;updatedAt:string};
+export type BusinessLocation=Location & {code?:string;phone?:string;contactEmail?:string;addressLine1?:string;addressLine2?:string;city?:string;state?:string;postalCode?:string;timezone?:string};
+export type AccountingSnapshot={ledgerAccounts:LedgerAccount[];journals:JournalEntry[];journalLines:JournalLine[];truncated:boolean};
 export type StaffLocation={id:string;name:string;type:string};
 export type StaffMember={userId:string;email:string;displayName?:string|null;role:string;active:boolean;joinedAt?:string;locationIds:string[];locationNames:string[]};
 export type SessionPayload={user:{id:string;email:string;displayName?:string};organizations:SessionOrg[];locations:Location[]};
 export const api={
   me:()=>request<SessionPayload>('/api/auth/me'),
+  business:(organizationId:string)=>request<{business:BusinessProfile;canManage:boolean}>(`/api/business?organizationId=${encodeURIComponent(organizationId)}`),
+  updateBusiness:(body:Partial<BusinessProfile>&{organizationId:string})=>request<{business:BusinessProfile}>('/api/business',{method:'PATCH',body:JSON.stringify(body)}),
+  locations:(organizationId:string)=>request<{locations:BusinessLocation[];canManage:boolean}>(`/api/locations?organizationId=${encodeURIComponent(organizationId)}`),
+  createLocation:(body:{organizationId:string;name:string;type:'region'|'branch'|'warehouse';code?:string;parentId?:string;phone?:string;contactEmail?:string;addressLine1?:string;addressLine2?:string;city?:string;state?:string;postalCode?:string})=>request<{location:BusinessLocation}>('/api/locations',{method:'POST',body:JSON.stringify(body)}),
+  updateLocation:(body:{organizationId:string;locationId:string;action:'update'|'archive'|'restore';name?:string;type?:'region'|'branch'|'warehouse';code?:string|null;parentId?:string|null;phone?:string|null;contactEmail?:string|null;addressLine1?:string|null;addressLine2?:string|null;city?:string|null;state?:string|null;postalCode?:string|null})=>request<{location:BusinessLocation}>('/api/locations',{method:'PATCH',body:JSON.stringify(body)}),
+  accounting:(organizationId:string)=>request<AccountingSnapshot>(`/api/accounting?organizationId=${encodeURIComponent(organizationId)}`),
   login:(body:{email:string;password:string})=>request<{user:{id:string;email:string;displayName?:string}}>('/api/auth/login',{method:'POST',body:JSON.stringify(body)}),
   register:(body:{email:string;password:string;displayName:string;organizationName:string;industry:string;locationName:string})=>request<{user:{id:string;email:string;displayName:string};organization:{id:string;name:string;industry:string};location:{id:string;name:string}}>('/api/auth/register',{method:'POST',body:JSON.stringify(body)}),
   logout:()=>request<{ok:boolean}>('/api/auth/logout',{method:'POST'}),

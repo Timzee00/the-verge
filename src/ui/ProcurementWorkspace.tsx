@@ -123,7 +123,26 @@ export default function ProcurementWorkspace({organizationId,locations,products,
         return {productId:line.productId,quantityOrdered:quantity,unitCostMinor:parseMajorToMinor(line.unitCost)};
       });
       if(new Set(items.map(item=>item.productId)).size!==items.length)throw new Error('A product can appear only once in the same purchase order.');
-      await api.procurementAction({organizationId,action:'create_purchase_order',supplierId:orderSupplierId,locationId:orderLocationId,expectedAt:expectedAt||undefined,notes:orderNotes,items});
+      const request={supplierId:orderSupplierId,locationId:orderLocationId,expectedAt:expectedAt||null,notes:orderNotes,items:items.slice().sort((a,b)=>a.productId.localeCompare(b.productId))};
+      const requestPayload=JSON.stringify(request);
+      const keyName=`purchaseOrderKey:${organizationId}`;
+      const savedKey=await localDB.meta.get(keyName);
+      let idempotencyKey:string;
+      if(savedKey) {
+        const stored=JSON.parse(savedKey.value) as {id:string;payload:string;request:typeof request};
+        idempotencyKey=stored.id;
+        if(stored.payload!==requestPayload) {
+          setOrderSupplierId(stored.request.supplierId);setOrderLocationId(stored.request.locationId);
+          setExpectedAt(stored.request.expectedAt??'');setOrderNotes(stored.request.notes);
+          setOrderLines(stored.request.items.map(item=>({productId:item.productId,quantity:String(item.quantityOrdered),unitCost:(item.unitCostMinor/100).toFixed(2)})));
+          throw new Error('A previous purchase order request is awaiting confirmation. The original details have been restored; retry those exact details before creating another order.');
+        }
+      } else {
+        idempotencyKey=crypto.randomUUID();
+        await localDB.meta.put({key:keyName,value:JSON.stringify({id:idempotencyKey,payload:requestPayload,request})});
+      }
+      await api.procurementAction({organizationId,action:'create_purchase_order',idempotencyKey,...request});
+      await localDB.meta.delete(keyName);
       setOrderNotes('');setExpectedAt('');setOrderLines([emptyOrderLine()]);
       await refreshAfterChange('Purchase order created and sent to the supplier workflow.');
     } catch(err) {setError(err instanceof Error?err.message:'Purchase order could not be created.');}
@@ -176,7 +195,26 @@ export default function ProcurementWorkspace({organizationId,locations,products,
         return {productId:line.productId,quantity};
       });
       if(new Set(items.map(item=>item.productId)).size!==items.length)throw new Error('A product can appear only once in the same transfer.');
-      await api.procurementAction({organizationId,action:'create_transfer',fromLocationId:transferFromId,toLocationId:transferToId,notes:transferNotes,items});
+      const request={fromLocationId:transferFromId,toLocationId:transferToId,notes:transferNotes,items:items.slice().sort((a,b)=>a.productId.localeCompare(b.productId))};
+      const requestPayload=JSON.stringify(request);
+      const keyName=`stockTransferKey:${organizationId}`;
+      const savedKey=await localDB.meta.get(keyName);
+      let idempotencyKey:string;
+      if(savedKey) {
+        const stored=JSON.parse(savedKey.value) as {id:string;payload:string;request:typeof request};
+        idempotencyKey=stored.id;
+        if(stored.payload!==requestPayload) {
+          setTransferFromId(stored.request.fromLocationId);setTransferToId(stored.request.toLocationId);
+          setTransferNotes(stored.request.notes);
+          setTransferLines(stored.request.items.map(item=>({productId:item.productId,quantity:String(item.quantity)})));
+          throw new Error('A previous transfer request is awaiting confirmation. The original details have been restored; retry those exact details before creating another transfer.');
+        }
+      } else {
+        idempotencyKey=crypto.randomUUID();
+        await localDB.meta.put({key:keyName,value:JSON.stringify({id:idempotencyKey,payload:requestPayload,request})});
+      }
+      await api.procurementAction({organizationId,action:'create_transfer',idempotencyKey,...request});
+      await localDB.meta.delete(keyName);
       setTransferNotes('');setTransferLines([emptyTransferLine()]);
       await refreshAfterChange('Stock transfer created as a draft.');
     } catch(err) {setError(err instanceof Error?err.message:'Transfer could not be created.');}

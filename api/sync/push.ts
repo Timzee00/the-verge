@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { db, transactionPool } from '../_db.js';
 import { json, method, requireUser } from '../_http.js';
+import { validateInventoryMovement } from '../src/domain/inventory.js';
 
 const ALLOWED = new Set(['inventory_event', 'product', 'customer', 'sale', 'expense']);
 const ENTITY_PERMISSION: Record<string, string> = {
@@ -24,20 +25,6 @@ function canWrite(role: string, entity: string) {
 }
 
 function errorText(error: unknown) { return String((error as any)?.message ?? error); }
-
-function assertInventoryMovement(type: unknown, quantityDelta: unknown) {
-  const quantity = Number(quantityDelta);
-  if (!Number.isFinite(quantity) || quantity === 0) throw new Error('invalid_inventory_quantity');
-  if (type === 'sale') throw new Error('sale_requires_pos_transaction');
-  if (type === 'sale_void' || type === 'return') throw new Error('return_or_void_requires_approval_workflow');
-  const positiveTypes = new Set(['opening', 'purchase', 'transfer_in', 'reservation', 'reservation_release']);
-  const negativeTypes = new Set(['damage', 'transfer_out']);
-  if (positiveTypes.has(String(type)) && quantity < 0) throw new Error('invalid_inventory_direction');
-  if (negativeTypes.has(String(type)) && quantity > 0) throw new Error('invalid_inventory_direction');
-  if (type !== 'adjustment' && !positiveTypes.has(String(type)) && !negativeTypes.has(String(type))) {
-    throw new Error('invalid_inventory_event_type');
-  }
-}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!method(req, res, ['POST'])) return;
@@ -91,8 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!owned.rowCount) throw new Error('ownership_check_failed');
         if (!canAccessLocation(p.locationId)) throw new Error('location_access_denied');
 
-        assertInventoryMovement(p.type, p.quantityDelta);
-        const quantityDelta = Number(p.quantityDelta);
+        const quantityDelta = validateInventoryMovement(p.type, p.quantityDelta);
         if (quantityDelta < 0) {
           await pool.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [
             `inventory:${organizationId}:${p.locationId}:${p.productId}`,

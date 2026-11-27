@@ -57,7 +57,7 @@ export async function createPostedJournal(
   input: {
     organizationId: string;
     locationId: string;
-    sourceType: 'sale' | 'expense' | 'purchase' | 'transfer';
+    sourceType: 'sale' | 'expense' | 'purchase' | 'transfer' | 'opening' | 'supplier_payment';
     sourceId: string;
     description: string;
     occurredAt: string;

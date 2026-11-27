@@ -119,21 +119,22 @@ export default function InventoryTools({products,organizationId,locationId,devic
     if(!validRows.length||busy)return;
     setBusy(true); setError('');
     try {
-      const current=Number((await localDB.meta.get('localSequence'))?.value??Date.now());
-      let sequence=current+1; const createdAt=new Date().toISOString();
+      const createdAt=new Date().toISOString();
       const newProducts:Product[]=[]; const events:InventoryEvent[]=[]; const operations:SyncOperation[]=[];
-      for(const row of validRows) {
-        const productId=crypto.randomUUID(); const productSequence=sequence++;
-        const product:Product={id:productId,organizationId,sku:row.sku,barcode:row.barcode,name:row.name,brand:row.brand,category:row.category,unit:row.unit,standardCostMinor:row.costMinor,retailPriceMinor:row.sellMinor,reorderLevel:row.reorderLevel,active:true,trackBatch:false,trackExpiry:false,createdAt,updatedAt:createdAt};
-        newProducts.push(product);
-        operations.push({id:crypto.randomUUID(),organizationId,deviceId,entity:'product',entityId:productId,operation:'create',payload:product,createdAt,attempts:0,state:'pending',localSequence:productSequence});
-        if(row.quantity>0) {
-          const eventSequence=sequence++; const event:InventoryEvent={id:crypto.randomUUID(),organizationId,locationId,productId,type:'opening',quantityDelta:row.quantity,unitCostMinor:row.costMinor,occurredAt:createdAt,deviceId,localSequence:eventSequence,syncState:'pending',createdAt};
-          events.push(event);
-          operations.push({id:crypto.randomUUID(),organizationId,deviceId,entity:'inventory_event',entityId:event.id,operation:'create',payload:event,createdAt,attempts:0,state:'pending',localSequence:eventSequence});
+      await localDB.transaction('rw',[localDB.products,localDB.inventoryEvents,localDB.syncOperations,localDB.meta],async()=>{
+        const current=Number((await localDB.meta.get('localSequence'))?.value??Date.now());
+        let sequence=current+1;
+        for(const row of validRows) {
+          const productId=crypto.randomUUID(); const productSequence=sequence++;
+          const product:Product={id:productId,organizationId,sku:row.sku,barcode:row.barcode,name:row.name,brand:row.brand,category:row.category,unit:row.unit,standardCostMinor:row.costMinor,retailPriceMinor:row.sellMinor,reorderLevel:row.reorderLevel,active:true,trackBatch:false,trackExpiry:false,createdAt,updatedAt:createdAt};
+          newProducts.push(product);
+          operations.push({id:crypto.randomUUID(),organizationId,deviceId,entity:'product',entityId:productId,operation:'create',payload:product,createdAt,attempts:0,state:'pending',localSequence:productSequence});
+          if(row.quantity>0) {
+            const eventSequence=sequence++; const event:InventoryEvent={id:crypto.randomUUID(),organizationId,locationId,productId,type:'opening',quantityDelta:row.quantity,unitCostMinor:row.costMinor,occurredAt:createdAt,deviceId,localSequence:eventSequence,syncState:'pending',createdAt};
+            events.push(event);
+            operations.push({id:crypto.randomUUID(),organizationId,deviceId,entity:'inventory_event',entityId:event.id,operation:'create',payload:event,createdAt,attempts:0,state:'pending',localSequence:eventSequence});
+          }
         }
-      }
-      await localDB.transaction('rw',localDB.products,localDB.inventoryEvents,localDB.syncOperations,localDB.meta,async()=>{
         await localDB.products.bulkAdd(newProducts);
         if(events.length)await localDB.inventoryEvents.bulkAdd(events);
         await localDB.syncOperations.bulkAdd(operations);

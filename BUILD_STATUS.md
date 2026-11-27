@@ -61,3 +61,15 @@ Do not describe this build as production-ready until these items are completed:
 **THE VERGE — Powered by Timzee Corp**
 
 The product is intended as a local-first Nigerian SME business operating system. Current code is a production candidate, not a certified production release.
+
+
+## Final review addendum — 27 November 2026
+
+Further changes now committed after the prior status snapshot:
+- Opening inventory movements create balanced opening-equity journals; only owner/admin/manager roles can sync opening stock.
+- Supplier payment source type is included in the journal source constraint migration.
+- Supplier payment API and UI support partial receipt settlement, outstanding balance validation, exact retry payloads and AP/cash-bank journal posting.
+- Inventory staff no longer have the unlinked stock receiving or catalogue import path; they receive against assigned purchase orders.
+- Sync validation now leaves unknown/database-schema errors retryable instead of incorrectly marking them permanently rejected.
+
+These are source changes only. The current main branch has not been built or deployed in this session. Migrations 006 and 007 remain unapplied. CI/domain tests and browser end-to-end tests for this latest code remain **NOT RUN**.

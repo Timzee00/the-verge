@@ -203,10 +203,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } else {
         const expense = p;
         if (expense.id !== op.entityId || expense.organizationId !== organizationId || expense.deviceId !== op.deviceId) throw new Error('invalid_expense_identity');
-        if (!expense.id || !expense.category || !expense.description || !Number.isFinite(Number(expense.amountMinor)) || Number(expense.amountMinor) <= 0) throw new Error('invalid_expense_payload');
+        if (!expense.id || typeof expense.category !== 'string' || !expense.category.trim() || typeof expense.description !== 'string' || !expense.description.trim() || !Number.isSafeInteger(Number(expense.amountMinor)) || Number(expense.amountMinor) <= 0 || !['cash','bank','transfer','card'].includes(String(expense.paymentMethod)) || typeof expense.occurredAt !== 'string') throw new Error('invalid_expense_payload');
         if (!organizationWide && !expense.locationId) throw new Error('expense_location_required');
         if (expense.locationId) {
-          const location = await pool.query('select 1 from locations where id=$1 and organization_id=$2 limit 1', [expense.locationId, organizationId]);
+          const location = await pool.query('select 1 from locations where id=$1 and organization_id=$2 and active=true limit 1', [expense.locationId, organizationId]);
           if (!location.rowCount) throw new Error('location_ownership_check_failed');
           if (!canAccessLocation(expense.locationId)) throw new Error('location_access_denied');
         }

@@ -30,8 +30,20 @@ ALTER TABLE journal_entries
   ADD COLUMN IF NOT EXISTS location_id uuid REFERENCES locations(id) ON DELETE SET NULL;
 
 -- Supplier settlements are a first-class journal source, not a generic transfer.
-ALTER TABLE journal_entries
-  DROP CONSTRAINT IF EXISTS journal_entries_source_type_check;
+DO $
+DECLARE constraint_row record;
+BEGIN
+  FOR constraint_row IN
+    SELECT conname
+    FROM pg_constraint
+    WHERE conrelid = 'journal_entries'::regclass
+      AND contype = 'c'
+      AND pg_get_constraintdef(oid) ILIKE '%source_type%'
+  LOOP
+    EXECUTE format('ALTER TABLE journal_entries DROP CONSTRAINT %I', constraint_row.conname);
+  END LOOP;
+END $;
+
 ALTER TABLE journal_entries
   ADD CONSTRAINT journal_entries_source_type_check
   CHECK (source_type IN ('sale','purchase','expense','transfer','opening','supplier_payment','adjustment','other'));

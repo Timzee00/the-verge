@@ -112,6 +112,7 @@ CROSS JOIN (VALUES
   ('1010','Bank','asset','debit'),
   ('1100','Accounts Receivable','asset','debit'),
   ('1200','Inventory','asset','debit'),
+  ('1210','Inventory in Transit','asset','debit'),
   ('2000','Accounts Payable','liability','credit'),
   ('3000','Owner Equity','equity','credit'),
   ('4000','Sales Revenue','revenue','credit'),

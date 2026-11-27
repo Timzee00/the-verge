@@ -30,7 +30,7 @@ ALTER TABLE journal_entries
   ADD COLUMN IF NOT EXISTS location_id uuid REFERENCES locations(id) ON DELETE SET NULL;
 
 -- Supplier settlements are a first-class journal source, not a generic transfer.
-DO $
+DO $$
 DECLARE constraint_row record;
 BEGIN
   FOR constraint_row IN
@@ -42,7 +42,7 @@ BEGIN
   LOOP
     EXECUTE format('ALTER TABLE journal_entries DROP CONSTRAINT %I', constraint_row.conname);
   END LOOP;
-END $;
+END $$;
 
 ALTER TABLE journal_entries
   ADD CONSTRAINT journal_entries_source_type_check

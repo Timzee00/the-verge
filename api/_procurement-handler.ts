@@ -459,11 +459,15 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
       if(stage==='dispatch') {
         for(const line of normalized) {
           const stock=await pool.query(
-            `select coalesce(sum(case when event_type not in ('reservation','reservation_release') then quantity_delta else 0 end),0) as stock
+            `select
+              coalesce(sum(case when event_type not in ('reservation','reservation_release') then quantity_delta else 0 end),0) as stock,
+              coalesce(sum(case when event_type='reservation' then quantity_delta when event_type='reservation_release' then -abs(quantity_delta) else 0 end),0) as reserved
              from inventory_events where organization_id=$1 and location_id=$2 and product_id=$3`,
             [organizationId,transfer.from_location_id,line.productId],
           );
-          const available=Number(stock.rows[0]?.stock??0);
+          const onHand=Number(stock.rows[0]?.stock??0);
+          const reserved=Number(stock.rows[0]?.reserved??0);
+          const available=onHand-reserved;
           if(!Number.isSafeInteger(available)||available<line.quantity)throw new Error('insufficient_transfer_stock');
           await pool.query(
             'update stock_transfer_items set unit_cost_minor=$3 where transfer_id=$1 and product_id=$2',

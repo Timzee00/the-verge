@@ -11,7 +11,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
  const organizationId=String(req.query.organizationId??''); const since=String(req.query.since??'1970-01-01T00:00:00.000Z');
  if(!organizationId)return json(res,400,{error:'organizationId_required'});
  let cursor:Cursor;
- try{cursor=req.query.cursor?JSON.parse(String(req.query.cursor)) as Cursor:{snapshot:new Date().toISOString(),products:{at:since,id:ZERO_ID},events:{at:since,id:ZERO_ID},sales:{at:since,id:ZERO_ID},customers:{at:since,id:ZERO_ID}};if(!cursor.customers)cursor.customers={at:since,id:ZERO_ID};if(!cursor.expenses)cursor.expenses={at:since,id:ZERO_ID};}catch{return json(res,400,{error:'invalid_cursor'});}
+ try{cursor=req.query.cursor?JSON.parse(String(req.query.cursor)) as Cursor:{snapshot:new Date().toISOString(),products:{at:since,id:ZERO_ID},events:{at:since,id:ZERO_ID},sales:{at:since,id:ZERO_ID},customers:{at:since,id:ZERO_ID},expenses:{at:since,id:ZERO_ID}};if(!cursor.customers)cursor.customers={at:since,id:ZERO_ID};if(!cursor.expenses)cursor.expenses={at:since,id:ZERO_ID};}catch{return json(res,400,{error:'invalid_cursor'});}
  if(!cursor||!cursor.snapshot||!cursor.products?.at||!cursor.events?.at||!cursor.sales?.at||!cursor.customers?.at||!cursor.expenses?.at)return json(res,400,{error:'invalid_cursor'});
  const sql=db(); const membership=await sql`select role from memberships where organization_id=${organizationId} and user_id=${user.id} and active=true limit 1`; if(!membership.length)return json(res,403,{error:'forbidden'});
  const role=String(membership[0].role);const organizationWide=['business_owner','platform_admin'].includes(role);

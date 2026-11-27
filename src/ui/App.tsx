@@ -96,6 +96,18 @@ export default function App(){
   async function syncCloud(){
  if(!online||!authed||!activeOrgId||activeOrgId===demoOrg)return;
  try{
+  const freshSession=await api.me();
+  await persistSessionAccess(freshSession);
+  const activeMembership=freshSession.organizations.find(org=>org.id===activeOrgId);
+  if(!activeMembership){
+   const fallback=freshSession.organizations[0];
+   if(fallback){
+    setActiveOrgId(fallback.id);setActiveOrgName(fallback.name);setSelectedLocationId('');
+    await localDB.meta.bulkPut([{key:'activeOrgId',value:fallback.id},{key:'activeOrgName',value:fallback.name}]);
+    await refresh(fallback.id);return;
+   }
+   await logout();setToast('Your business access has ended. Sign in again or contact the business owner.');return;
+  }
   const ops=await localDB.syncOperations.where('organizationId').equals(activeOrgId).and(x=>x.state==='pending').toArray();
   for(const op of ops){if(!Number.isInteger(op.localSequence)){const sequence=await nextLocalSequence();op.localSequence=sequence;await localDB.syncOperations.update(op.id,{localSequence:sequence});}}
   ops.sort((a,b)=>(a.localSequence??0)-(b.localSequence??0));

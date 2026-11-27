@@ -112,7 +112,7 @@ export async function handleLocations(req: VercelRequest, res: VercelResponse) {
 
       const fields = [
         optionalText(body.phone, 40, 'phone'),
-        body.contactEmail ? String(body.contactEmail).trim().toLowerCase() : null,
+        optionalText(body.contactEmail, 320, 'contact_email')?.toLowerCase() ?? null,
         optionalText(body.addressLine1, 160, 'address_line1'),
         optionalText(body.addressLine2, 160, 'address_line2'),
         optionalText(body.city, 100, 'city'),
@@ -201,7 +201,7 @@ export async function handleLocations(req: VercelRequest, res: VercelResponse) {
         Object.prototype.hasOwnProperty.call(body,key) ? optionalText(body[key],max,column) : current[column];
       const phone = value('phone','phone',40);
       const emailValue = Object.prototype.hasOwnProperty.call(body,'contactEmail')
-        ? (body.contactEmail ? String(body.contactEmail).trim().toLowerCase() : null)
+        ? (optionalText(body.contactEmail,320,'contact_email')?.toLowerCase() ?? null)
         : current.contact_email;
       if (emailValue && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(emailValue))) throw new Error('invalid_contact_email');
       const line1 = value('addressLine1','address_line1',160);

@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { transactionPool } from '../_db.js';
 import { cleanEmail, cleanText, cleanPassword, isHttps, json, method, newToken, hashToken, setSessionCookie } from '../_http.js';
 import { hashPassword } from '../_password.js';
+import { ensureAccountingAccounts } from '../_accounting.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!method(req, res, ['POST'])) return;
@@ -20,6 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await pool.query('insert into app_users (id,email,display_name,email_verified_at) values ($1,$2,$3,null)', [userId, email, displayName]);
       await pool.query('insert into user_credentials (user_id,password_hash) values ($1,$2)', [userId, passwordHash]);
       await pool.query("insert into organizations (id,name,base_currency,industry) values ($1,$2,'NGN',$3)", [orgId, organizationName, industry]);
+      await ensureAccountingAccounts(pool, orgId);
       await pool.query("insert into locations (id,organization_id,name,type,code) values ($1,$2,$3,'branch','MAIN')", [locationId, orgId, locationName]);
       await pool.query("insert into memberships (id,organization_id,user_id,role,active) values ($1,$2,$3,'business_owner',true)", [membershipId, orgId, userId]);
       await pool.query("insert into user_sessions (user_id,token_hash,expires_at,ip_hint,user_agent) values ($1,$2,now()+interval '30 days',$3,$4)", [userId, hashToken(token), req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() ?? null, req.headers['user-agent'] ?? null]);

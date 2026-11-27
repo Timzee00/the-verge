@@ -168,6 +168,13 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
       const before=found.rows[0];
       let after:any;
       if(action==='archive_supplier'||action==='restore_supplier') {
+        if(action==='archive_supplier') {
+          const openOrders=await pool.query(
+            `select 1 from purchase_orders where organization_id=$1 and supplier_id=$2 and status in ('ordered','partially_received') limit 1`,
+            [organizationId,supplierId],
+          );
+          if(openOrders.rowCount)throw new Error('supplier_has_open_purchase_orders');
+        }
         after=(await pool.query(
           `update suppliers set active=$3,updated_at=now() where id=$1 and organization_id=$2
            returning id,organization_id,name,phone,email,address_line1,address_line2,city,state,tax_identifier,notes,active,created_at,updated_at`,
@@ -201,7 +208,7 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
       await pool.query('ROLLBACK').catch(()=>undefined);
       if(error?.code==='23505')return json(res,409,{error:'supplier_name_in_use'});
       const message=String(error?.message??error);
-      if(message.endsWith('_too_long')||['supplier_name_required','invalid_email','invalid_supplier','supplier_not_found'].includes(message))return json(res,400,{error:message});
+      if(message.endsWith('_too_long')||['supplier_name_required','invalid_email','invalid_supplier','supplier_not_found','supplier_has_open_purchase_orders'].includes(message))return json(res,400,{error:message});
       console.error('[procurement.supplier]',{name:error?.name,code:error?.code});
       return json(res,500,{error:'supplier_operation_failed'});
     } finally { await pool.end(); }
@@ -478,7 +485,6 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
       await pool.query('ROLLBACK').catch(()=>undefined);
       const message=String(error?.message??error);
       if(message.endsWith('_too_long')||['invalid_transfer','invalid_or_duplicate_transfer_product','invalid_transfer_quantity','product_not_available','transfer_location_not_available'].includes(message))return json(res,400,{error:message});
-      if(message==='transfer_idempotency_payload_mismatch')return json(res,409,{error:message});
       if(message==='transfer_idempotency_payload_mismatch')return json(res,409,{error:message});
       console.error('[procurement.transfer_create]',{name:error?.name,code:error?.code});
       return json(res,500,{error:'transfer_create_failed'});

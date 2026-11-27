@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { localDB } from '../db/local';
 import { appendInventoryEvent, getLocalStock } from '../inventory/ledger';
 import { exportAccount, EXPORT_SECTIONS, type ExportSection } from '../export/account';
@@ -27,6 +27,7 @@ function Stat({label,value,detail}:{label:string;value:string;detail?:string}){r
 function SectionHead({eyebrow,title,subtitle,action}:{eyebrow:string;title:string;subtitle:string;action?:React.ReactNode}){return <div className="section-head"><div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2><p>{subtitle}</p></div>{action}</div>}
 
 export default function App(){
+ const syncInFlight=useRef(false);
  const [view,setView]=useState<View>('overview');
  const [theme,setTheme]=useState<'light'|'dark'>(()=>{try{const saved=localStorage.getItem('verge-theme');if(saved==='light'||saved==='dark')return saved;return window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}catch{return 'light'}});
  useEffect(()=>{document.documentElement.dataset.theme=theme;document.body.dataset.theme=theme;document.querySelector('meta[name="theme-color"]')?.setAttribute('content',theme==='dark'?'#0b1220':'#eaf1fc');try{localStorage.setItem('verge-theme',theme)}catch{}},[theme]);
@@ -49,7 +50,7 @@ export default function App(){
    }
   }
  };
- const refresh=async(orgId=activeOrgId)=>{const storedScope=await localDB.meta.get(`allowedLocations:${orgId}`);const allLocations=await localDB.locations.where('organizationId').equals(orgId).toArray();let visibleLocations=allLocations;if(storedScope){try{const allowed=JSON.parse(storedScope.value) as string[];visibleLocations=allLocations.filter(location=>allowed.includes(location.id));}catch{visibleLocations=[];}}setLocations(visibleLocations);setPending(await localDB.syncOperations.where('organizationId').equals(orgId).and(operation=>operation.state==='pending').count());setProducts(await localDB.products.where('organizationId').equals(orgId).toArray());const visibleLocationIds=new Set(visibleLocations.map(location=>location.id));const recentSales=(await localDB.sales.where('organizationId').equals(orgId).toArray()).filter(sale=>visibleLocationIds.has(sale.locationId)).sort((a,b)=>b.occurredAt.localeCompare(a.occurredAt)).slice(0,50);setSales(recentSales);setSaleItems(recentSales.length?await localDB.saleItems.where('saleId').anyOf(recentSales.map(sale=>sale.id)).toArray():[]);setCustomers(await localDB.customers.where('organizationId').equals(orgId).toArray());setEvents(await localDB.inventoryEvents.toArray());setAccounts(await localDB.personalAccounts.toArray());setTransactions(await localDB.personalTransactions.orderBy('occurredAt').reverse().limit(100).toArray());setBudgets(await localDB.budgets.toArray());setGoals(await localDB.savingsGoals.toArray());setDebts(await localDB.debts.toArray());setLedger(await localDB.ledgerAccounts.where('organizationId').equals(orgId).toArray());setJournals(await localDB.journalEntries.where('organizationId').equals(orgId).reverse().limit(30).toArray());setJournalLines(await localDB.journalLines.toArray())};
+ const refresh=async(orgId=activeOrgId)=>{const storedScope=await localDB.meta.get(`allowedLocations:${orgId}`);const allLocations=await localDB.locations.where('organizationId').equals(orgId).toArray();let visibleLocations=allLocations;if(storedScope){try{const allowed=JSON.parse(storedScope.value) as string[];visibleLocations=allLocations.filter(location=>allowed.includes(location.id));}catch{visibleLocations=[];}}setLocations(visibleLocations);setPending(await localDB.syncOperations.where('organizationId').equals(orgId).and(operation=>operation.state==='pending').count());setProducts(await localDB.products.where('organizationId').equals(orgId).toArray());const visibleLocationIds=new Set(visibleLocations.map(location=>location.id));const recentSales=(await localDB.sales.where('organizationId').equals(orgId).toArray()).filter(sale=>visibleLocationIds.has(sale.locationId)).sort((a,b)=>b.occurredAt.localeCompare(a.occurredAt)).slice(0,50);setSales(recentSales);setSaleItems(recentSales.length?await localDB.saleItems.where('saleId').anyOf(recentSales.map(sale=>sale.id)).toArray():[]);setCustomers(await localDB.customers.where('organizationId').equals(orgId).toArray());setEvents((await localDB.inventoryEvents.where('organizationId').equals(orgId).toArray()).filter(event=>visibleLocationIds.has(event.locationId)));setAccounts(await localDB.personalAccounts.toArray());setTransactions(await localDB.personalTransactions.orderBy('occurredAt').reverse().limit(100).toArray());setBudgets(await localDB.budgets.toArray());setGoals(await localDB.savingsGoals.toArray());setDebts(await localDB.debts.toArray());setLedger(await localDB.ledgerAccounts.where('organizationId').equals(orgId).toArray());const recentJournals=await localDB.journalEntries.where('organizationId').equals(orgId).reverse().limit(30).toArray();setJournals(recentJournals);setJournalLines(recentJournals.length?await localDB.journalLines.where('journalEntryId').anyOf(recentJournals.map(journal=>journal.id)).toArray():[])};
  useEffect(()=>{const on=()=>{setOnline(true);void refresh()};const off=()=>setOnline(false);addEventListener('online',on);addEventListener('offline',off);void refresh();return()=>{removeEventListener('online',on);removeEventListener('offline',off)}},[]);
  useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),2800);return()=>clearTimeout(t)},[toast]);
  useEffect(()=>{const boot=async()=>{try{const session=await api.me();setAuthed(true);await persistSessionAccess(session);const saved=await localDB.meta.get('activeOrgId');const org=session.organizations.find(x=>x.id===saved?.value)??session.organizations[0];if(org){setActiveOrgId(org.id);setActiveOrgName(org.name);await localDB.meta.bulkPut([{key:'activeOrgId',value:org.id},{key:'activeOrgName',value:org.name}]);}}catch{setAuthed(false)}finally{setAuthReady(true)}};void boot()},[]);
@@ -94,7 +95,8 @@ export default function App(){
    return sale;
   }
   async function syncCloud(){
- if(!online||!authed||!activeOrgId||activeOrgId===demoOrg)return;
+ if(!online||!authed||!activeOrgId||activeOrgId===demoOrg||syncInFlight.current)return;
+ syncInFlight.current=true;
  try{
   const freshSession=await api.me();
   await persistSessionAccess(freshSession);
@@ -108,7 +110,7 @@ export default function App(){
    }
    await logout();setToast('Your business access has ended. Sign in again or contact the business owner.');return;
   }
-  const ops=await localDB.syncOperations.where('organizationId').equals(activeOrgId).and(x=>x.state==='pending').toArray();
+  const ops=await localDB.syncOperations.where('organizationId').equals(activeOrgId).and(x=>x.state==='pending'&&(!x.nextAttemptAt||!Number.isFinite(Date.parse(x.nextAttemptAt))||Date.parse(x.nextAttemptAt)<=Date.now())).toArray();
   for(const op of ops){if(!Number.isInteger(op.localSequence)){const sequence=await nextLocalSequence();op.localSequence=sequence;await localDB.syncOperations.update(op.id,{localSequence:sequence});}}
   ops.sort((a,b)=>(a.localSequence??0)-(b.localSequence??0));
   let conflictCount=0;
@@ -125,7 +127,7 @@ export default function App(){
   while(hasMore&&pages<10){const pulled=await api.pull(activeOrgId,meta?.value??'1970-01-01T00:00:00.000Z',cursor);await localDB.transaction('rw',[localDB.products,localDB.locations,localDB.inventoryEvents,localDB.sales,localDB.saleItems,localDB.customers],async()=>{if(pulled.products.length)await localDB.products.bulkPut(pulled.products);if(pulled.locations.length)await localDB.locations.bulkPut(pulled.locations);if(pulled.inventoryEvents.length)await localDB.inventoryEvents.bulkPut(pulled.inventoryEvents.map(e=>({...e,syncState:'synced'} as InventoryEvent)));if(pulled.sales.length)await localDB.sales.bulkPut(pulled.sales.map((sale:any)=>({...sale,syncState:'synced'})));if(pulled.saleItems.length)await localDB.saleItems.bulkPut(pulled.saleItems);if(pulled.customers.length)await localDB.customers.bulkPut(pulled.customers);});cursor=pulled.nextCursor;hasMore=pulled.hasMore;serverTime=pulled.serverTime;pages++;}
   if(hasMore&&cursor)await localDB.meta.put({key:`syncCursor:${activeOrgId}`,value:cursor});else{await localDB.meta.put({key:`lastSync:${activeOrgId}`,value:serverTime});await localDB.meta.delete(`syncCursor:${activeOrgId}`);}
   await refresh();if(conflictCount)setToast(`${conflictCount} change${conflictCount===1?'':'s'} need review before syncing again.`);
- }catch(error){setToast(`Sync paused: ${String(error).replace(/^Error: /,'')}`);}
+ }catch(error){setToast(`Sync paused: ${String(error).replace(/^Error: /,'')}`);}finally{syncInFlight.current=false;}
 }
  async function download(){const all=await exportAccount(EXPORT_SECTIONS);const a=document.createElement('a');a.href=URL.createObjectURL(all);a.download=`the-verge-account-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(a.href);}
  if(!authReady)return <div className="auth-shell"><ThemeToggle theme={theme} onToggle={toggleTheme}/><section className="auth-card"><div className="brand"><div className="brand-mark">V</div><div><strong>THE VERGE</strong><small>Powered by Timzee Corp</small></div></div><p>Loading your secure workspace…</p></section></div>;

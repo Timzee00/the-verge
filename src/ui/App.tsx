@@ -121,11 +121,11 @@ export default function App(){
     else{await localDB.syncOperations.update(op.id,{attempts:op.attempts+1,lastError:r.error??'Sync failed',nextAttemptAt:new Date(Date.now()+Math.min(60000,1000*2**Math.min(op.attempts+1,6))).toISOString()});}
    }
   }
-  const meta=await localDB.meta.get(\`lastSync:\${activeOrgId}\`);let cursor=(await localDB.meta.get(\`syncCursor:\${activeOrgId}\`))?.value;let hasMore=true;let pages=0;let serverTime=meta?.value??'1970-01-01T00:00:00.000Z';
+  const meta=await localDB.meta.get(`lastSync:${activeOrgId}`);let cursor=(await localDB.meta.get(`syncCursor:${activeOrgId}`))?.value;let hasMore=true;let pages=0;let serverTime=meta?.value??'1970-01-01T00:00:00.000Z';
   while(hasMore&&pages<10){const pulled=await api.pull(activeOrgId,meta?.value??'1970-01-01T00:00:00.000Z',cursor);await localDB.transaction('rw',localDB.products,localDB.locations,localDB.inventoryEvents,localDB.sales,localDB.saleItems,localDB.customers,async()=>{if(pulled.products.length)await localDB.products.bulkPut(pulled.products);if(pulled.locations.length)await localDB.locations.bulkPut(pulled.locations);if(pulled.inventoryEvents.length)await localDB.inventoryEvents.bulkPut(pulled.inventoryEvents.map(e=>({...e,syncState:'synced'} as InventoryEvent)));if(pulled.sales.length)await localDB.sales.bulkPut(pulled.sales.map((sale:any)=>({...sale,syncState:'synced'})));if(pulled.saleItems.length)await localDB.saleItems.bulkPut(pulled.saleItems);if(pulled.customers.length)await localDB.customers.bulkPut(pulled.customers);});cursor=pulled.nextCursor;hasMore=pulled.hasMore;serverTime=pulled.serverTime;pages++;}
-  if(hasMore&&cursor)await localDB.meta.put({key:\`syncCursor:\${activeOrgId}\`,value:cursor});else{await localDB.meta.put({key:\`lastSync:\${activeOrgId}\`,value:serverTime});await localDB.meta.delete(\`syncCursor:\${activeOrgId}\`);}
-  await refresh();if(conflictCount)setToast(\`\${conflictCount} change\${conflictCount===1?'':'s'} need review before syncing again.\`);
- }catch(error){setToast(\`Sync paused: \${String(error).replace(/^Error: /,'')}\`);}
+  if(hasMore&&cursor)await localDB.meta.put({key:`syncCursor:${activeOrgId}`,value:cursor});else{await localDB.meta.put({key:`lastSync:${activeOrgId}`,value:serverTime});await localDB.meta.delete(`syncCursor:${activeOrgId}`);}
+  await refresh();if(conflictCount)setToast(`${conflictCount} change${conflictCount===1?'':'s'} need review before syncing again.`);
+ }catch(error){setToast(`Sync paused: ${String(error).replace(/^Error: /,'')}`);}
 }
  async function download(){const all=await exportAccount(EXPORT_SECTIONS);const a=document.createElement('a');a.href=URL.createObjectURL(all);a.download=`the-verge-account-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(a.href);}
  if(!authReady)return <div className="auth-shell"><ThemeToggle theme={theme} onToggle={toggleTheme}/><section className="auth-card"><div className="brand"><div className="brand-mark">V</div><div><strong>THE VERGE</strong><small>Powered by Timzee Corp</small></div></div><p>Loading your secure workspace…</p></section></div>;

@@ -1,4 +1,4 @@
-import { assertBalanced, buildExpenseJournalLines, buildOpeningInventoryJournalLines, buildPurchaseJournalLines, buildSaleJournalLines, buildTransferJournalLines } from '../src/domain/accounting.js';
+import { assertBalanced, buildExpenseJournalLines, buildOpeningInventoryJournalLines, buildPurchaseJournalLines, buildSaleJournalLines, buildSupplierPaymentJournalLines, buildTransferJournalLines } from '../src/domain/accounting.js';
 
 type QueryClient = {
   query: (text: string, values?: unknown[]) => Promise<{ rows: any[]; rowCount: number | null }>;
@@ -215,6 +215,27 @@ export async function postPurchaseReceiptJournal(
     organizationId: input.organizationId, locationId: input.locationId, sourceType: 'purchase',
     sourceId: input.sourceId, description: `Supplier receipt: ${input.supplierName}`.slice(0,240),
     occurredAt: input.occurredAt, createdBy: input.createdBy, lines,
+  });
+}
+
+export async function postSupplierPaymentJournal(
+  client: QueryClient,
+  input: {
+    organizationId: string; locationId: string; sourceId: string; occurredAt: string; createdBy: string;
+    supplierName: string; amountMinor: number; paymentMethod: 'cash'|'bank'|'transfer'|'card';
+  },
+) {
+  const accounts=await ensureAccountingAccounts(client,input.organizationId);
+  const paymentCode=input.paymentMethod==='cash'?'1000':'1010';
+  const lines:JournalLineInput[]=buildSupplierPaymentJournalLines({
+    payableAccountId:accounts['2000'],
+    paymentAccountId:accounts[paymentCode],
+    amountMinor:input.amountMinor,
+  }).map((line,index)=>({...line,memo:index===0?`Supplier settlement: ${input.supplierName}`:`Paid by ${input.paymentMethod}`}));
+  return createPostedJournal(client,{
+    organizationId:input.organizationId,locationId:input.locationId,sourceType:'supplier_payment',
+    sourceId:input.sourceId,description:`Supplier payment: ${input.supplierName}`,
+    occurredAt:input.occurredAt,createdBy:input.createdBy,lines,
   });
 }
 

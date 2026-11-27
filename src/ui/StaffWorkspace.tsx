@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { Customer, Location, ParkedCart, Product, Sale, SaleItem } from '../core/types';
 import type { SessionOrg } from '../api';
 import { localDB } from '../db/local';
@@ -42,7 +42,7 @@ const dateTime = (value: string) => new Intl.DateTimeFormat('en-NG', {
 const uid = () => crypto.randomUUID();
 
 function Icon({ name, size = 20 }: { name: string; size?: number }) {
-  const paths: Record<string, React.ReactNode> = {
+  const paths: Record<string, ReactNode> = {
     search: <><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.2 4.2"/></>,
     scan: <><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M4 12h16M8 9v6m4-6v6m4-6v6"/></>,
     box: <><path d="m12 3 9 4.5v9L12 21l-9-4.5v-9L12 3Z"/><path d="m3.5 7.5 8.5 4 8.5-4M12 12v9M8 5l9 4.5"/></>,
@@ -194,7 +194,7 @@ function CashierWorkspace({
     setScannerOpen(false);
   }, [addToCart, findByCode]);
 
-  const handleSearchKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleSearchKey = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== 'Enter') return;
     const exact = findByCode(query);
     if (exact) {
@@ -442,8 +442,8 @@ function CashierWorkspace({
           <p className="pos-receipt-meta">Receipt #{receipt.sale.id.slice(0, 8).toUpperCase()}<br/>{dateTime(receipt.sale.occurredAt)}<br/>{location?.name ?? 'Business location'}</p>
           <div className="pos-receipt-items">{receipt.lines.map((line, index) => <div className="pos-receipt-line" key={`${line.product.id}-${index}`}><span>{line.product.name}<small>{line.quantity} × {money(line.unitPriceMinor)}</small></span><strong>{money(line.quantity * line.unitPriceMinor)}</strong></div>)}</div>
           <div className="pos-receipt-total"><span>Total paid</span><strong>{money(receipt.sale.totalMinor)}</strong></div>
-          <p className="pos-receipt-meta">Payment: {receipt.sale.paymentMethod}<br/>Status: {receipt.sale.status}<br/>Cashier: {userEmail}</p>
-          <p className="pos-receipt-thanks">Thank you for shopping with us.</p>
+          <p className="pos-receipt-meta">Payment: {receipt.sale.paymentMethod}<br/>Record: {receipt.sale.syncState==='synced'?'Synced to business server':'Pending server sync'}<br/>Cashier: {userEmail}</p>
+          <p className="pos-receipt-thanks">{receipt.sale.syncState==='synced'?'Thank you for shopping with us.':'OFFLINE RECORD · AWAITING SERVER SYNC'}</p>
         </div>
         <div className="staff-receipt-actions no-print"><button type="button" className="staff-park-btn" onClick={printReceipt}><Icon name="printer"/> Print receipt</button><button type="button" className="staff-checkout-confirm" onClick={() => setReceipt(null)}>New sale</button></div>
       </section>

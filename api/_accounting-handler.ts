@@ -62,32 +62,36 @@ export async function handleAccounting(req: VercelRequest, res: VercelResponse) 
 
   const balanceRows = !organizationWide && !locationIds.length ? [] : organizationWide
     ? await sql`
-        select jl.account_id as "accountId", je.location_id as "locationId",
+        select jl.account_id as "accountId", la.code as "accountCode", la.name as "accountName",
+               la.normal_balance as "normalBalance", la.account_class as class, je.location_id as "locationId",
                coalesce(sum(jl.debit_minor),0) as "debitMinor",
                coalesce(sum(jl.credit_minor),0) as "creditMinor"
         from journal_lines jl
         join journal_entries je on je.id=jl.journal_entry_id
+        join ledger_accounts la on la.id=jl.account_id and la.organization_id=${organizationId}
         where je.organization_id=${organizationId} and je.status='posted'
-        group by jl.account_id,je.location_id
-        order by jl.account_id,je.location_id
+        group by jl.account_id,la.code,la.name,la.normal_balance,la.account_class,je.location_id
+        order by la.code,je.location_id
       `
     : await sql`
-        select jl.account_id as "accountId", je.location_id as "locationId",
+        select jl.account_id as "accountId", la.code as "accountCode", la.name as "accountName",
+               la.normal_balance as "normalBalance", la.account_class as class, je.location_id as "locationId",
                coalesce(sum(jl.debit_minor),0) as "debitMinor",
                coalesce(sum(jl.credit_minor),0) as "creditMinor"
         from journal_lines jl
         join journal_entries je on je.id=jl.journal_entry_id
+        join ledger_accounts la on la.id=jl.account_id and la.organization_id=${organizationId}
         where je.organization_id=${organizationId} and je.status='posted'
           and je.location_id=any(${locationIds}::uuid[])
-        group by jl.account_id,je.location_id
-        order by jl.account_id,je.location_id
+        group by jl.account_id,la.code,la.name,la.normal_balance,la.account_class,je.location_id
+        order by la.code,je.location_id
       `;
   const balances = balanceRows.map((row:any) => {
     const debitMinor=Number(row.debitMinor),creditMinor=Number(row.creditMinor);
     if(!Number.isSafeInteger(debitMinor)||debitMinor<0||!Number.isSafeInteger(creditMinor)||creditMinor<0) {
       throw new Error('account_balance_out_of_safe_integer_range');
     }
-    return {accountId:String(row.accountId),locationId:row.locationId?String(row.locationId):null,debitMinor,creditMinor};
+    return {accountId:String(row.accountId),accountCode:String(row.accountCode),accountName:String(row.accountName),normalBalance:String(row.normalBalance),class:String(row.class),locationId:row.locationId?String(row.locationId):null,debitMinor,creditMinor};
   });
   const trialDebit=balances.reduce((sum:any,row:any)=>sum+row.debitMinor,0);
   const trialCredit=balances.reduce((sum:any,row:any)=>sum+row.creditMinor,0);

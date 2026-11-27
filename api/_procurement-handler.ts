@@ -280,7 +280,6 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
       const order=orderResult.rows[0];
       const locationId=String(order.location_id);
       if(!hasLocationAccess(locationId))throw new Error('location_access_denied');
-      if(!['ordered','partially_received'].includes(String(order.status)))throw new Error('purchase_order_not_receivable');
       const requested=new Map<string,number>();
       for(const raw of rawItems) {
         const itemId=String(raw?.purchaseOrderItemId??'');
@@ -296,6 +295,7 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
         await pool.query('COMMIT');
         return json(res,200,{receipt:{id:receiptId,deduplicated:true}});
       }
+      if(!['ordered','partially_received'].includes(String(order.status)))throw new Error('purchase_order_not_receivable');
       const orderItemIds=[...requested.keys()];
       const items=await pool.query(
         `select poi.id,poi.product_id,poi.quantity_ordered,poi.quantity_received,poi.unit_cost_minor,p.name as product_name

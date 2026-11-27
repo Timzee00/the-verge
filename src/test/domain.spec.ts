@@ -2,7 +2,7 @@ function assert(condition: unknown, message = 'assertion failed') { if (!conditi
 function equal(a: unknown, b: unknown, message?: string) { assert(a === b, message ?? `${String(a)} !== ${String(b)}`); }
 function deepEqual(a: unknown, b: unknown, message='deep equality failed') { equal(JSON.stringify(a), JSON.stringify(b), message); }
 function throws(fn: () => unknown) { let thrown = false; try { fn(); } catch { thrown = true; } assert(thrown, 'expected function to throw'); }
-import { assertBalanced, buildExpenseJournalLines, buildSaleJournalLines } from '../domain/accounting.js';
+import { assertBalanced, buildExpenseJournalLines, buildPurchaseJournalLines, buildSaleJournalLines, buildTransferJournalLines } from '../domain/accounting.js';
 import { parseMajorToMinor, formatMinor } from '../domain/money.js';
 import { calculateAvailable, validateInventoryMovement, validateSaleAgainstSnapshot } from '../domain/inventory.js';
 import { deduplicateOperations, nextRetryAt } from '../domain/sync.js';
@@ -27,6 +27,19 @@ equal(cashExpense[0].debitMinor,72500);
 equal(cashExpense[1].creditMinor,72500);
 throws(() => buildExpenseJournalLines({expenseAccountId:'expense',paymentAccountId:'cash',amountMinor:0}));
 throws(() => buildExpenseJournalLines({expenseAccountId:'cash',paymentAccountId:'cash',amountMinor:1}));
+
+const purchaseJournal = buildPurchaseJournalLines({inventoryAccountId:'inventory',payableAccountId:'payables',totalCostMinor:250000});
+assertBalanced(purchaseJournal);
+equal(purchaseJournal[0].debitMinor,250000);
+equal(purchaseJournal[1].creditMinor,250000);
+
+const transferOutJournal = buildTransferJournalLines({inventoryAccountId:'inventory',inTransitAccountId:'transit',transferCostMinor:99000,stage:'dispatch'});
+const transferInJournal = buildTransferJournalLines({inventoryAccountId:'inventory',inTransitAccountId:'transit',transferCostMinor:99000,stage:'receive'});
+assertBalanced(transferOutJournal);
+assertBalanced(transferInJournal);
+equal(transferOutJournal[0].accountId,'transit');
+equal(transferInJournal[0].accountId,'inventory');
+throws(() => buildPurchaseJournalLines({inventoryAccountId:'inventory',payableAccountId:'payables',totalCostMinor:0}));
 
 const available = calculateAvailable([
   { id:'1', organizationId:'o', locationId:'l', productId:'p', type:'opening', quantityDelta:1, occurredAt:'2026-01-01T00:00:00.000Z', deviceId:'d1', localSequence:1, syncState:'synced', createdAt:'2026-01-01T00:00:00.000Z' },

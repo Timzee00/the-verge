@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { db, transactionPool } from '../_db.js';
 import { json, method, requireUser } from '../_http.js';
-import { validateInventoryMovement } from '../src/domain/inventory.js';
+import { validateInventoryMovement } from '../../src/domain/inventory.js';
 
 const ALLOWED = new Set(['inventory_event', 'product', 'customer', 'sale', 'expense']);
 const ENTITY_PERMISSION: Record<string, string> = {

@@ -42,6 +42,7 @@ export default function ProcurementWorkspace({organizationId,locations,products,
   const [transferNotes,setTransferNotes]=useState('');
   const [transferLines,setTransferLines]=useState<TransferLineDraft[]>([emptyTransferLine()]);
   const [receiveDrafts,setReceiveDrafts]=useState<Record<string,Record<string,string>>>({});
+  const [pendingReceiptIds,setPendingReceiptIds]=useState<string[]>([]);
   const [section,setSection]=useState<'suppliers'|'purchases'|'transfers'>('suppliers');
 
   async function load() {
@@ -53,6 +54,16 @@ export default function ProcurementWorkspace({organizationId,locations,products,
       setOrderLocationId(current=>current||locations.find(item=>item.active)?.id||'');
       setTransferFromId(current=>current||locations.find(item=>item.active)?.id||'');
       setTransferToId(current=>current||locations.find(item=>item.active&&item.id!==transferFromId)?.id||'');
+      const pendingReceipts=await Promise.all(data.purchaseOrders.map(async order=>{
+        const saved=await localDB.meta.get(`purchaseReceiptKey:${organizationId}:${order.id}`);
+        if(!saved)return null;
+        try {
+          const stored=JSON.parse(saved.value) as {payload?:string};
+          const items=stored.payload?JSON.parse(stored.payload) as Array<{purchaseOrderItemId:string;quantityReceived:number}>:[];
+          return {orderId:order.id,items};
+        } catch { return {orderId:order.id,items:[] as Array<{purchaseOrderItemId:string;quantityReceived:number}>}; }
+      }));
+      setPendingReceiptIds(pendingReceipts.filter((entry):entry is {orderId:string;items:Array<{purchaseOrderItemId:string;quantityReceived:number}>}=>Boolean(entry)).map(entry=>entry.orderId));
       setReceiveDrafts(previous=>{
         const next={...previous};
         for(const order of data.purchaseOrders) {
@@ -60,6 +71,8 @@ export default function ProcurementWorkspace({organizationId,locations,products,
           for(const item of data.purchaseOrderItems.filter(item=>item.purchaseOrderId===order.id)) {
             if(current[item.id]===undefined)current[item.id]=String(Math.max(0,item.quantityOrdered-item.quantityReceived));
           }
+          const pending=pendingReceipts.find(entry=>entry?.orderId===order.id);
+          if(pending)for(const item of pending.items)current[item.purchaseOrderItemId]=String(item.quantityReceived);
           next[order.id]=current;
         }
         return next;
@@ -307,7 +320,7 @@ export default function ProcurementWorkspace({organizationId,locations,products,
       <div className="procurement-list">
         {(snapshot?.purchaseOrders??[]).map(order=>{
           const items=orderItems(order);
-          const pending=order.status!=='cancelled'&&order.status!=='received'&&items.some(item=>item.quantityReceived<item.quantityOrdered);
+          const pending=pendingReceiptIds.includes(order.id)||(order.status!=='cancelled'&&order.status!=='received'&&items.some(item=>item.quantityReceived<item.quantityOrdered));
           return <article className="procurement-order-card" key={order.id}>
             <div className="procurement-order-header"><div><strong>{order.reference}</strong><small>{order.supplierName} · {order.locationName} · {dateLabel(order.orderedAt)}</small></div><span className={'procurement-status '+order.status}>{order.status.replace('_',' ')}</span></div>
             {items.map(item=>{
@@ -318,7 +331,7 @@ export default function ProcurementWorkspace({organizationId,locations,products,
               </div>;
             })}
             {pending&&snapshot?.canManage&&<div className="procurement-order-footer"><span>Remaining lines can be received in multiple deliveries.</span><button type="button" className="primary" disabled={busy} onClick={()=>void receivePurchaseOrder(order)}>Record delivery</button></div>}
-          {order.status==='ordered'&&items.every(item=>item.quantityReceived===0)&&snapshot?.canManage&&<div className="procurement-order-footer"><span>This order has not been received and can be cancelled.</span><button type="button" className="secondary" disabled={busy} onClick={()=>void cancelPurchaseOrder(order)}>Cancel order</button></div>}
+          {order.status==='ordered'&&!pendingReceiptIds.includes(order.id)&&items.every(item=>item.quantityReceived===0)&&snapshot?.canManage&&<div className="procurement-order-footer"><span>This order has not been received and can be cancelled.</span><button type="button" className="secondary" disabled={busy} onClick={()=>void cancelPurchaseOrder(order)}>Cancel order</button></div>}
           </article>;
         })}
         {!snapshot?.purchaseOrders.length&&<div className="procurement-empty">No purchase orders yet. Create an order to record an expected supplier delivery.</div>}

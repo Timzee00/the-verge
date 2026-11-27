@@ -6,6 +6,7 @@ import { assertBalanced, buildSaleJournalLines } from '../domain/accounting.js';
 import { parseMajorToMinor, formatMinor } from '../domain/money.js';
 import { calculateAvailable, validateSaleAgainstSnapshot } from '../domain/inventory.js';
 import { deduplicateOperations, nextRetryAt } from '../domain/sync.js';
+import { calculateCartTotals } from '../domain/pos.js';
 
 equal(parseMajorToMinor('1,250.50'), 125050);
 throws(() => parseMajorToMinor('10.999'));
@@ -33,6 +34,19 @@ const ops = deduplicateOperations([
 ]);
 equal(ops.length, 1);
 assert(nextRetryAt(0).endsWith('Z'));
+
+
+const cartProductA = { ...saleProduct, id:'cart-a', retailPriceMinor:1250 };
+const cartProductB = { ...saleProduct, id:'cart-b', retailPriceMinor:2200 };
+const cartTotals = calculateCartTotals([
+  { product:cartProductA, quantity:2 },
+  { product:cartProductB, quantity:1 },
+]);
+equal(cartTotals.subtotalMinor, 4700);
+equal(cartTotals.itemCount, 2);
+equal(cartTotals.unitCount, 3);
+throws(() => calculateCartTotals([{ product:cartProductA, quantity:0 }]));
+throws(() => calculateCartTotals([{ product:cartProductA, quantity:1 }, { product:cartProductA, quantity:2 }]));
 
 console.log('domain tests passed');
 

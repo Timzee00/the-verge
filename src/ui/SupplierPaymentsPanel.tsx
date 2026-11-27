@@ -76,6 +76,7 @@ export default function SupplierPaymentsPanel({organizationId,snapshot,onSaved}:
       };
       const payload=JSON.stringify(request);
       const keyName=`supplierPaymentKey:${organizationId}:${selectedReceipt.id}`;
+      if(pendingPayment&&pendingPayment.key!==keyName)throw new Error('A previous supplier payment is awaiting confirmation. Retry that exact payment before starting another.');
       const saved=await localDB.meta.get(keyName);
       let idempotencyKey:string;
       if(saved) {
@@ -94,6 +95,7 @@ export default function SupplierPaymentsPanel({organizationId,snapshot,onSaved}:
         idempotencyKey=crypto.randomUUID();
         await localDB.meta.put({key:keyName,value:JSON.stringify({id:idempotencyKey,payload,request})});
       }
+      setPendingPayment({key:keyName,id:idempotencyKey,payload,request});
       const result=await api.procurementAction({organizationId,action:'record_supplier_payment',idempotencyKey,...request});
       setNotice(`Payment recorded: ${money(result.supplierPayment?.amountMinor??amountMinor)}. The supplier payable journal has been updated.`);
       await onSaved();

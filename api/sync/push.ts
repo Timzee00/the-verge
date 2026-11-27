@@ -90,12 +90,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             `inventory:${organizationId}:${p.locationId}:${p.productId}`,
           ]);
           const stockResult = await pool.query(
-            `select coalesce(sum(case when event_type not in ('reservation','reservation_release') then quantity_delta else 0 end),0) as stock
+            `select
+               coalesce(sum(case when event_type not in ('reservation','reservation_release') then quantity_delta else 0 end),0) as stock,
+               coalesce(sum(case when event_type='reservation' then quantity_delta when event_type='reservation_release' then -abs(quantity_delta) else 0 end),0) as reserved
              from inventory_events where organization_id=$1 and location_id=$2 and product_id=$3`,
             [organizationId, p.locationId, p.productId],
           );
           const stock = Number(stockResult.rows[0]?.stock ?? 0);
-          if (!Number.isFinite(stock) || stock + quantityDelta < 0) throw new Error('insufficient_stock');
+          const reserved = Number(stockResult.rows[0]?.reserved ?? 0);
+          if (!Number.isFinite(stock) || !Number.isFinite(reserved) || stock - reserved + quantityDelta < 0) throw new Error('insufficient_stock');
         }
         const insertedEvent=await pool.query(`insert into inventory_events (id,organization_id,location_id,product_id,event_type,quantity_delta,unit_cost_minor,reference_id,occurred_at,device_id,local_sequence,created_at,created_by)
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
@@ -193,13 +196,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // All inventory checks happen before any sale records are inserted.
         for (const { item, event } of validatedItems) {
           const stockResult = await pool.query(
-            `select coalesce(sum(case when event_type not in ('reservation','reservation_release') then quantity_delta else 0 end),0) as stock
+            `select
+               coalesce(sum(case when event_type not in ('reservation','reservation_release') then quantity_delta else 0 end),0) as stock,
+               coalesce(sum(case when event_type='reservation' then quantity_delta when event_type='reservation_release' then -abs(quantity_delta) else 0 end),0) as reserved
              from inventory_events where organization_id=$1 and location_id=$2 and product_id=$3`,
             [organizationId, sale.locationId, item.productId],
           );
           const stock = Number(stockResult.rows[0]?.stock ?? 0);
+          const reserved = Number(stockResult.rows[0]?.reserved ?? 0);
           const required = Math.abs(Number(event.quantityDelta));
-          if (!Number.isSafeInteger(required) || required <= 0 || stock < required) throw new Error('insufficient_stock');
+          if (!Number.isSafeInteger(required) || required <= 0 || !Number.isFinite(reserved) || stock - reserved < required) throw new Error('insufficient_stock');
         }
 
         const insertedSale=await pool.query(`insert into sales (id,organization_id,location_id,customer_id,subtotal_minor,discount_minor,total_minor,payment_method,status,below_cost,discount_reason,occurred_at,device_id,local_sequence,created_at,created_by)

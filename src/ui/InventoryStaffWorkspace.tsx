@@ -4,6 +4,7 @@ import { localDB } from '../db/local';
 import { getLocalStock } from '../inventory/ledger';
 import { validateInventoryEvent } from '../domain/inventory';
 import InventoryTools from '../inventory/InventoryTools';
+import ProcurementWorkspace from './ProcurementWorkspace';
 import type { SessionOrg } from '../api';
 import './staff-workspace.css';
 
@@ -184,14 +185,8 @@ export default function InventoryStaffWorkspace(props: Props) {
       </section>
 
       <section className="panel inventory-staff-receive">
-        <div className="section-head"><div><span className="eyebrow">GOODS RECEIVING</span><h2>Receive stock</h2><p>Record a supplier delivery or stock receipt for the selected location. Each receipt becomes an auditable inventory event.</p></div></div>
-        <div className="inventory-staff-receive-form">
-          <label>Product<select value={selectedProductId} onChange={event => setSelectedProductId(event.target.value)}><option value="">Choose product</option>{activeProducts.map(product => <option key={product.id} value={product.id}>{product.name} · {product.sku}</option>)}</select></label>
-          <label>Quantity received<input type="number" min="1" step="1" inputMode="numeric" value={quantity} onChange={event => setQuantity(event.target.value)}/></label>
-          <button type="button" className="staff-checkout-confirm" disabled={saving || !selectedProductId || !locationId || locationId === 'no-location'} onClick={() => void receiveStock()}>{saving ? 'Saving receipt…' : 'Record stock receipt'}</button>
-        </div>
+        <div className="section-head"><div><span className="eyebrow">SUPPLIER RECEIVING</span><h2>Receive a delivery</h2><p>Record deliveries against an approved purchase order below. This preserves the supplier, purchase cost, partial receipt history, stock movement and accounting entry together.</p></div></div>
       </section>
-
       {locationId !== 'no-location' && <InventoryTools
         products={products}
         organizationId={organizationId}
@@ -201,6 +196,7 @@ export default function InventoryStaffWorkspace(props: Props) {
         onImported={onRefresh}
         notify={setNotice}
       />}
+      {locationId !== 'no-location' && <ProcurementWorkspace organizationId={organizationId} locations={locations} products={products} onRefresh={onRefresh} mode="inventory_staff"/>}
       {locationId === 'no-location' && <section className="panel inventory-staff-receive"><strong>No location is assigned</strong><p>Ask the business owner to assign at least one active location before importing or receiving stock.</p></section>}
       <footer className="staff-footer"><span>THE VERGE · Powered by Timzee Corp</span><span>{location?.name ?? 'No location'} · {online ? 'Connected' : 'Offline'} · Staff {userId.slice(0, 6).toUpperCase()}</span></footer>
     </main>

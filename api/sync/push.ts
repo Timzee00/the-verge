@@ -285,7 +285,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } catch (error) {
       await pool.query('ROLLBACK').catch(() => undefined);
       const message = errorText(error);
-      results.push({ id: op.id, ok: false, conflict: message.includes('insufficient_stock'), error: message });
+      const errorCode=String((error as any)?.code??'');
+      const transientCodes=new Set(['40001','40P01','55P03','57014','57P01','53300','ECONNRESET','ECONNREFUSED','ETIMEDOUT','EAI_AGAIN','ENOTFOUND']);
+      const conflict=message==='insufficient_stock'||message==='price_changed_refresh_cart'||message==='product_cost_changed_refresh_cart';
+      const rejected=!conflict&&!transientCodes.has(errorCode);
+      results.push({ id: op.id, ok: false, conflict, rejected, error: message });
     } finally {
       await pool.end();
     }

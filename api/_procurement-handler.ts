@@ -209,9 +209,9 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
 
   if(action==='create_purchase_order') {
     if(!MANAGE_ROLES.has(role))return json(res,403,{error:'purchase_order_permission_required'});
-    const supplierId=String(body.supplierId??''),locationId=String(body.locationId??'');
+    const supplierId=String(body.supplierId??''),locationId=String(body.locationId??''),orderId=String(body.idempotencyKey??'');
     const rawItems=Array.isArray(body.items)?body.items:[];
-    if(!UUID.test(supplierId)||!UUID.test(locationId)||!rawItems.length||rawItems.length>100) return json(res,400,{error:'invalid_purchase_order'});
+    if(!UUID.test(supplierId)||!UUID.test(locationId)||!UUID.test(orderId)||!rawItems.length||rawItems.length>100) return json(res,400,{error:'invalid_purchase_order'});
     if(!hasLocationAccess(locationId))return json(res,403,{error:'location_access_denied'});
     const pool=transactionPool();
     try {
@@ -232,17 +232,32 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
         if(!product.rowCount)throw new Error('product_not_available');
         validated.push({productId,quantity,unitCostMinor});
       }
-      const orderId=crypto.randomUUID();
       const orderReference=reference('PO',orderId);
       const notes=optionalText(body.notes,500,'notes');
       const expectedAt=body.expectedAt?String(body.expectedAt):null;
       if(expectedAt&&!/^\d{4}-\d{2}-\d{2}$/.test(expectedAt))throw new Error('invalid_expected_date');
+      await pool.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[`purchase-order:${organizationId}:${orderId}`]);
+      const priorOrder=await pool.query(
+        'select id,organization_id,supplier_id,location_id,reference,status,notes,expected_at,ordered_at from purchase_orders where id=$1 limit 1 for update',
+        [orderId],
+      );
+      if(priorOrder.rowCount) {
+        const prior=priorOrder.rows[0];
+        if(String(prior.organization_id)!==organizationId||String(prior.supplier_id)!==supplierId||String(prior.location_id)!==locationId||String(prior.notes??'')!==String(notes??'')||String(prior.expected_at??'').slice(0,10)!==String(expectedAt??'')) throw new Error('purchase_order_idempotency_payload_mismatch');
+        const priorLines=await pool.query('select product_id,quantity_ordered,unit_cost_minor from purchase_order_items where purchase_order_id=$1',[orderId]);
+        const priorItems=priorLines.rows.map((row:any)=>({productId:String(row.product_id),quantity:Number(row.quantity_ordered),unitCostMinor:Number(row.unit_cost_minor)})).sort((a:any,b:any)=>a.productId.localeCompare(b.productId));
+        const wanted=validated.slice().sort((a:any,b:any)=>a.productId.localeCompare(b.productId));
+        if(priorItems.length!==wanted.length||wanted.some((item:any,index:number)=>priorItems[index]?.productId!==item.productId||priorItems[index]?.quantity!==item.quantity||priorItems[index]?.unitCostMinor!==item.unitCostMinor)) throw new Error('purchase_order_idempotency_payload_mismatch');
+        await pool.query('COMMIT');
+        return json(res,200,{purchaseOrder:{id:orderId,reference:prior.reference,status:prior.status,orderedAt:prior.ordered_at,deduplicated:true}});
+      }
       const inserted=await pool.query(
         `insert into purchase_orders (id,organization_id,supplier_id,location_id,reference,status,notes,expected_at,created_by)
          values ($1,$2,$3,$4,$5,'ordered',$6,$7,$8)
-         returning id,reference,status,ordered_at`,
+         on conflict (id) do nothing returning id,reference,status,ordered_at`,
         [orderId,organizationId,supplierId,locationId,orderReference,notes,expectedAt,user.id],
       );
+      if(!inserted.rowCount)throw new Error('purchase_order_idempotency_payload_mismatch');
       for(const item of validated)await pool.query(
         `insert into purchase_order_items (id,purchase_order_id,product_id,quantity_ordered,quantity_received,unit_cost_minor)
          values (gen_random_uuid(),$1,$2,$3,0,$4)`,
@@ -257,6 +272,7 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
       await pool.query('ROLLBACK').catch(()=>undefined);
       const message=String(error?.message??error);
       if(message.endsWith('_too_long')||['invalid_or_duplicate_order_product','invalid_order_quantity','invalid_unit_cost','product_not_available','supplier_not_available','location_not_available','invalid_expected_date'].includes(message))return json(res,400,{error:message});
+      if(message==='purchase_order_idempotency_payload_mismatch')return json(res,409,{error:message});
       console.error('[procurement.purchase_order]',{name:error?.name,code:error?.code});
       return json(res,500,{error:'purchase_order_create_failed'});
     } finally { await pool.end(); }
@@ -372,9 +388,9 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
 
   if(action==='create_transfer') {
     if(!MANAGE_ROLES.has(role))return json(res,403,{error:'transfer_manage_permission_required'});
-    const fromLocationId=String(body.fromLocationId??''),toLocationId=String(body.toLocationId??'');
+    const fromLocationId=String(body.fromLocationId??''),toLocationId=String(body.toLocationId??''),transferId=String(body.idempotencyKey??'');
     const rawItems=Array.isArray(body.items)?body.items:[];
-    if(!UUID.test(fromLocationId)||!UUID.test(toLocationId)||fromLocationId===toLocationId||!rawItems.length||rawItems.length>100)return json(res,400,{error:'invalid_transfer'});
+    if(!UUID.test(fromLocationId)||!UUID.test(toLocationId)||!UUID.test(transferId)||fromLocationId===toLocationId||!rawItems.length||rawItems.length>100)return json(res,400,{error:'invalid_transfer'});
     if(!hasLocationAccess(fromLocationId)||!hasLocationAccess(toLocationId))return json(res,403,{error:'location_access_denied'});
     const pool=transactionPool();
     try {
@@ -395,14 +411,30 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
         if(!product.rowCount)throw new Error('product_not_available');
         items.push({productId,quantity});
       }
-      const transferId=crypto.randomUUID();
       const transferReference=reference('ST',transferId);
       const notes=optionalText(body.notes,500,'notes');
+      await pool.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[`stock-transfer:${organizationId}:${transferId}`]);
+      const priorTransfer=await pool.query(
+        'select id,organization_id,reference,from_location_id,to_location_id,notes,status from stock_transfers where id=$1 limit 1 for update',
+        [transferId],
+      );
+      if(priorTransfer.rowCount) {
+        const prior=priorTransfer.rows[0];
+        if(String(prior.organization_id)!==organizationId||String(prior.from_location_id)!==fromLocationId||String(prior.to_location_id)!==toLocationId||String(prior.notes??'')!==String(notes??'')) throw new Error('transfer_idempotency_payload_mismatch');
+        const priorLines=await pool.query('select product_id,quantity from stock_transfer_items where transfer_id=$1',[transferId]);
+        const priorItems=priorLines.rows.map((row:any)=>({productId:String(row.product_id),quantity:Number(row.quantity)})).sort((a:any,b:any)=>a.productId.localeCompare(b.productId));
+        const wanted=items.slice().sort((a:any,b:any)=>a.productId.localeCompare(b.productId));
+        if(priorItems.length!==wanted.length||wanted.some((item:any,index:number)=>priorItems[index]?.productId!==item.productId||priorItems[index]?.quantity!==item.quantity)) throw new Error('transfer_idempotency_payload_mismatch');
+        await pool.query('COMMIT');
+        return json(res,200,{transfer:{id:transferId,reference:prior.reference,status:prior.status,deduplicated:true}});
+      }
       await pool.query(
         `insert into stock_transfers (id,organization_id,reference,from_location_id,to_location_id,status,notes,created_by)
-         values ($1,$2,$3,$4,$5,'draft',$6,$7)`,
+         values ($1,$2,$3,$4,$5,'draft',$6,$7) on conflict (id) do nothing`,
         [transferId,organizationId,transferReference,fromLocationId,toLocationId,notes,user.id],
       );
+      const savedTransfer=await pool.query('select id from stock_transfers where id=$1 and organization_id=$2',[transferId,organizationId]);
+      if(!savedTransfer.rowCount)throw new Error('transfer_idempotency_payload_mismatch');
       for(const item of items)await pool.query(
         'insert into stock_transfer_items (id,transfer_id,product_id,quantity,unit_cost_minor) values (gen_random_uuid(),$1,$2,$3,0)',
         [transferId,item.productId,item.quantity],
@@ -416,6 +448,7 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
       await pool.query('ROLLBACK').catch(()=>undefined);
       const message=String(error?.message??error);
       if(message.endsWith('_too_long')||['invalid_transfer','invalid_or_duplicate_transfer_product','invalid_transfer_quantity','product_not_available','transfer_location_not_available'].includes(message))return json(res,400,{error:message});
+      if(message==='transfer_idempotency_payload_mismatch')return json(res,409,{error:message});
       console.error('[procurement.transfer_create]',{name:error?.name,code:error?.code});
       return json(res,500,{error:'transfer_create_failed'});
     } finally { await pool.end(); }

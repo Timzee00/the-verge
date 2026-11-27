@@ -19,6 +19,7 @@ export const DEFAULT_CHART: Array<Pick<LedgerAccount,'code'|'name'|'class'|'norm
   { code:'1010', name:'Bank', class:'asset', normalBalance:'debit' },
   { code:'1100', name:'Accounts Receivable', class:'asset', normalBalance:'debit' },
   { code:'1200', name:'Inventory', class:'asset', normalBalance:'debit' },
+  { code:'1210', name:'Inventory in Transit', class:'asset', normalBalance:'debit' },
   { code:'2000', name:'Accounts Payable', class:'liability', normalBalance:'credit' },
   { code:'3000', name:'Owner Equity', class:'equity', normalBalance:'credit' },
   { code:'4000', name:'Sales Revenue', class:'revenue', normalBalance:'credit' },
@@ -50,6 +51,56 @@ export function buildExpenseJournalLines(input: ExpensePostingInput): Array<Omit
     { accountId: input.expenseAccountId, debitMinor: input.amountMinor, creditMinor: 0 },
     { accountId: input.paymentAccountId, debitMinor: 0, creditMinor: input.amountMinor },
   ];
+  assertBalanced(lines);
+  return lines;
+}
+
+export interface PurchasePostingInput {
+  inventoryAccountId: string;
+  payableAccountId: string;
+  totalCostMinor: number;
+}
+
+/** A supplier receipt increases inventory and the amount owed to the supplier. */
+export function buildPurchaseJournalLines(input: PurchasePostingInput): Array<Omit<JournalLine, 'id' | 'journalEntryId'>> {
+  if (!input.inventoryAccountId || !input.payableAccountId || input.inventoryAccountId === input.payableAccountId) {
+    throw new Error('Purchase posting requires inventory and payable accounts');
+  }
+  if (!Number.isSafeInteger(input.totalCostMinor) || input.totalCostMinor <= 0) {
+    throw new Error('Purchase amount must be a positive safe integer');
+  }
+  const lines = [
+    { accountId: input.inventoryAccountId, debitMinor: input.totalCostMinor, creditMinor: 0 },
+    { accountId: input.payableAccountId, debitMinor: 0, creditMinor: input.totalCostMinor },
+  ];
+  assertBalanced(lines);
+  return lines;
+}
+
+export interface TransferPostingInput {
+  inventoryAccountId: string;
+  inTransitAccountId: string;
+  transferCostMinor: number;
+  stage: 'dispatch'|'receive';
+}
+
+/** Move stock value through an in-transit asset without changing total inventory value. */
+export function buildTransferJournalLines(input: TransferPostingInput): Array<Omit<JournalLine, 'id' | 'journalEntryId'>> {
+  if (!input.inventoryAccountId || !input.inTransitAccountId || input.inventoryAccountId === input.inTransitAccountId) {
+    throw new Error('Transfer posting requires distinct inventory and transit accounts');
+  }
+  if (!Number.isSafeInteger(input.transferCostMinor) || input.transferCostMinor <= 0) {
+    throw new Error('Transfer value must be a positive safe integer');
+  }
+  const lines = input.stage === 'dispatch'
+    ? [
+        { accountId: input.inTransitAccountId, debitMinor: input.transferCostMinor, creditMinor: 0 },
+        { accountId: input.inventoryAccountId, debitMinor: 0, creditMinor: input.transferCostMinor },
+      ]
+    : [
+        { accountId: input.inventoryAccountId, debitMinor: input.transferCostMinor, creditMinor: 0 },
+        { accountId: input.inTransitAccountId, debitMinor: 0, creditMinor: input.transferCostMinor },
+      ];
   assertBalanced(lines);
   return lines;
 }

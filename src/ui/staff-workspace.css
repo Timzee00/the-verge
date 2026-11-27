@@ -244,3 +244,41 @@
   .pos-receipt-print { position: absolute !important; inset: 0 auto auto 0 !important; width: 100% !important; padding: 0 !important; }
   .no-print { display: none !important; }
 }
+
+
+/* Inventory staff workspace */
+.inventory-staff-main { display: grid; gap: 18px; }
+.inventory-staff-stats { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; }
+.inventory-staff-stats article { display: grid; gap: 8px; padding: 17px 18px; border: 1px solid var(--staff-line); border-radius: 14px; background: var(--staff-surface); box-shadow: var(--staff-shadow); }
+.inventory-staff-stats span { color: var(--staff-muted); font-size: 11px; font-weight: 650; }
+.inventory-staff-stats strong { font-size: 25px; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.inventory-staff-catalogue { padding: 18px; }
+.inventory-staff-heading { margin-bottom: 14px; }
+.inventory-staff-heading h2 { margin: 0; font-size: 20px; }
+.inventory-staff-search { width: 100%; max-width: 560px; margin: 0 0 14px; }
+.inventory-staff-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--staff-text); font-size: 13px; }
+.inventory-staff-table-wrap { width: 100%; overflow-x: auto; }
+.inventory-staff-table { width: 100%; border-collapse: collapse; min-width: 650px; font-size: 12px; }
+.inventory-staff-table th { padding: 11px 12px; text-align: left; color: var(--staff-muted); background: var(--staff-surface-muted); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+.inventory-staff-table td { padding: 12px; border-bottom: 1px solid var(--staff-line); vertical-align: middle; }
+.inventory-staff-table td:first-child { min-width: 180px; }
+.inventory-staff-table td strong, .inventory-staff-table td small { display: block; }
+.inventory-staff-table td small { margin-top: 4px; color: var(--staff-muted); font-size: 10px; }
+.inventory-staff-low { color: var(--staff-danger); }
+.inventory-staff-receive { padding: 20px; }
+.inventory-staff-receive-form { display: grid; grid-template-columns: minmax(0,1.3fr) minmax(140px,.6fr) auto; align-items: end; gap: 12px; }
+.inventory-staff-receive-form label { display: grid; gap: 7px; color: var(--staff-muted); font-size: 11px; font-weight: 700; }
+.inventory-staff-receive-form input, .inventory-staff-receive-form select { width: 100%; min-width: 0; height: 42px; padding: 0 11px; border: 1px solid var(--staff-line); border-radius: 9px; background: #fff; color: var(--staff-text); }
+@media (max-width: 760px) {
+  .inventory-staff-stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .inventory-staff-receive-form { grid-template-columns: 1fr 1fr; }
+  .inventory-staff-receive-form button { grid-column: 1 / -1; width: 100%; }
+}
+@media (max-width: 520px) {
+  .inventory-staff-main { padding-top: 18px; }
+  .inventory-staff-stats article { padding: 13px; }
+  .inventory-staff-stats strong { font-size: 21px; }
+  .inventory-staff-catalogue, .inventory-staff-receive { padding: 13px; }
+  .inventory-staff-receive-form { grid-template-columns: 1fr; }
+  .inventory-staff-receive-form button { grid-column: auto; }
+}

@@ -332,3 +332,23 @@ body[data-theme="dark"] .auth-notice{color:#8fe0b8;background:rgba(28,164,104,.1
   .supplier-form-actions { align-items:stretch; flex-direction:column; }
   .supplier-form-actions button { width:100%; }
 }
+
+
+/* Server-computed trial balance */
+.accounting-trial-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:12px 0; }
+.accounting-trial-summary > div { display:grid; gap:6px; padding:13px; border:1px solid var(--line); border-radius:10px; background:var(--surface-soft); }
+.accounting-trial-summary span { color:var(--muted); font-size:10px; font-weight:750; }
+.accounting-trial-summary strong { color:var(--text); font-size:18px; font-variant-numeric:tabular-nums; }
+.accounting-trial-table { display:grid; }
+.accounting-trial-row { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(110px,.7fr) minmax(110px,.7fr); align-items:center; gap:12px; padding:10px 8px; border-top:1px solid var(--line); font-size:11px; }
+.accounting-trial-row > span:first-child { display:grid; gap:3px; min-width:0; }
+.accounting-trial-row span strong { color:var(--text); font-size:11px; }
+.accounting-trial-row small { color:var(--muted); font-size:9px; }
+.accounting-trial-row > strong { text-align:right; font-variant-numeric:tabular-nums; }
+.accounting-trial-row.header { color:var(--muted); font-size:9px; font-weight:800; text-transform:uppercase; }
+.accounting-trial-row.header span:not(:first-child) { text-align:right; }
+@media (max-width:520px) {
+  .accounting-trial-row { grid-template-columns:minmax(0,1fr) minmax(75px,.6fr) minmax(75px,.6fr); gap:6px; padding:9px 3px; font-size:10px; }
+  .accounting-trial-row span strong { font-size:10px; }
+  .accounting-trial-summary strong { font-size:15px; }
+}

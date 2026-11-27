@@ -57,7 +57,7 @@ export interface Membership { id: ID; organizationId: ID; userId: ID; role: Role
 
 export type AccountClass = 'asset'|'liability'|'equity'|'revenue'|'expense';
 export interface LedgerAccount { id: ID; organizationId: ID; code: string; name: string; class: AccountClass; normalBalance: 'debit'|'credit'; active: boolean; }
-export interface JournalEntry { id: ID; organizationId: ID; locationId?: ID; reference: string; description: string; occurredAt: ISODate; sourceType: 'sale'|'purchase'|'expense'|'transfer'|'opening'|'adjustment'|'other'; sourceId?: ID; status: 'posted'|'voided'; createdAt: ISODate; createdBy?: ID; syncState: SyncState; }
+export interface JournalEntry { id: ID; organizationId: ID; locationId?: ID; reference: string; description: string; occurredAt: ISODate; sourceType: 'sale'|'purchase'|'expense'|'transfer'|'opening'|'supplier_payment'|'adjustment'|'other'; sourceId?: ID; status: 'posted'|'voided'; createdAt: ISODate; createdBy?: ID; syncState: SyncState; }
 export interface JournalLine { id: ID; journalEntryId: ID; accountId: ID; accountCode?: string; accountName?: string; debitMinor: number; creditMinor: number; memo?: string; }
 
 export interface Subscription { id: ID; organizationId?: ID; userId?: ID; plan: PlanCode; status: 'trialing'|'active'|'past_due'|'canceled'|'expired'; currentPeriodEnd?: ISODate; createdAt: ISODate; }

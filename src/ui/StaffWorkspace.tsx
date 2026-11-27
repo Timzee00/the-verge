@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { Customer, Expense, JournalEntry, JournalLine, Location, ParkedCart, Product, Sale, SaleItem } from '../core/types';
+import type { AccountBalance } from '../api';
 import type { SessionOrg } from '../api';
 import { localDB } from '../db/local';
 import { getLocalStock } from '../inventory/ledger';
@@ -21,6 +22,7 @@ type Props = {
   expenses: Expense[];
   journals: JournalEntry[];
   journalLines: JournalLine[];
+  balances: AccountBalance[];
   onRecordExpense: (input:{amount:string;category:string;description:string;paymentMethod:Expense['paymentMethod']}) => Promise<Expense>;
   userId: string;
   userEmail: string;

@@ -6,6 +6,7 @@ import type {
 } from '../api';
 import { api } from '../api';
 import { localDB } from '../db/local';
+import SupplierPaymentsPanel from './SupplierPaymentsPanel';
 
 type Props = {
   organizationId: string;
@@ -302,6 +303,8 @@ export default function ProcurementWorkspace({organizationId,locations,products,
       <button type="button" role="tab" aria-selected={section==='purchases'} className={section==='purchases'?'active':''} onClick={()=>setSection('purchases')}>Purchase orders <span>{snapshot?.purchaseOrders.length??0}</span></button>
       <button type="button" role="tab" aria-selected={section==='transfers'} className={section==='transfers'?'active':''} onClick={()=>setSection('transfers')}>Transfers <span>{snapshot?.transfers.length??0}</span></button>
     </div>
+
+    {section==='suppliers'&&snapshot?.canPaySuppliers&&<SupplierPaymentsPanel organizationId={organizationId} snapshot={snapshot} onSaved={async()=>{await refreshAfterChange('Supplier payment saved and posted.');}}/>}
 
     {section==='suppliers'&&mode==='owner'&&<div className="procurement-content">
       {snapshot?.canManage&&<form className="procurement-form supplier-form" onSubmit={createSupplier}>

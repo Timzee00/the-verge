@@ -77,6 +77,28 @@ export function buildPurchaseJournalLines(input: PurchasePostingInput): Array<Om
   return lines;
 }
 
+export interface OpeningInventoryPostingInput {
+  inventoryAccountId: string;
+  equityAccountId: string;
+  amountMinor: number;
+}
+
+/** Initial stock is an asset introduced against opening owner equity. */
+export function buildOpeningInventoryJournalLines(input: OpeningInventoryPostingInput): Array<Omit<JournalLine, 'id' | 'journalEntryId'>> {
+  if (!input.inventoryAccountId || !input.equityAccountId || input.inventoryAccountId === input.equityAccountId) {
+    throw new Error('Opening inventory requires inventory and equity accounts');
+  }
+  if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) {
+    throw new Error('Opening inventory value must be a positive safe integer');
+  }
+  const lines = [
+    { accountId: input.inventoryAccountId, debitMinor: input.amountMinor, creditMinor: 0 },
+    { accountId: input.equityAccountId, debitMinor: 0, creditMinor: input.amountMinor },
+  ];
+  assertBalanced(lines);
+  return lines;
+}
+
 export interface TransferPostingInput {
   inventoryAccountId: string;
   inTransitAccountId: string;

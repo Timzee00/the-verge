@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { db, transactionPool } from '../_db.js';
 import { json, method, requireUser } from '../_http.js';
 import { validateInventoryMovement } from '../../src/domain/inventory.js';
-import { postExpenseJournal, postSaleJournal } from '../_accounting.js';
+import { postExpenseJournal, postOpeningInventoryJournal, postSaleJournal } from '../_accounting.js';
 
 const ALLOWED = new Set(['inventory_event', 'product', 'customer', 'sale', 'expense']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -85,6 +85,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!canAccessLocation(p.locationId)) throw new Error('location_access_denied');
 
         const quantityDelta = validateInventoryMovement(p.type, p.quantityDelta);
+        const unitCostMinor=Number(p.unitCostMinor??0);
+        if(!Number.isSafeInteger(unitCostMinor)||unitCostMinor<0)throw new Error('invalid_inventory_unit_cost');
         if (quantityDelta < 0) {
           await pool.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [
             `inventory:${organizationId}:${p.locationId}:${p.productId}`,
@@ -107,6 +109,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const prior=await pool.query('select organization_id,location_id,product_id,event_type,quantity_delta,device_id,local_sequence,reference_id from inventory_events where id=$1 limit 1 for share',[p.id]);
           const row=prior.rows[0];
           if(!row || String(row.organization_id)!==organizationId || String(row.location_id)!==p.locationId || String(row.product_id)!==p.productId || row.event_type!==p.type || Number(row.quantity_delta)!==quantityDelta || String(row.device_id)!==op.deviceId || Number(row.local_sequence)!==op.localSequence || String(row.reference_id??'')!==String(p.referenceId??'')) throw new Error('inventory_event_id_collision');
+        }
+        if(p.type==='opening'&&quantityDelta>0&&unitCostMinor>0) {
+          const openingValue=quantityDelta*unitCostMinor;
+          if(!Number.isSafeInteger(openingValue))throw new Error('opening_inventory_value_overflow');
+          await postOpeningInventoryJournal(pool,{
+            organizationId,locationId:p.locationId,sourceId:p.id,
+            occurredAt:p.occurredAt,createdBy:user.id,totalCostMinor:openingValue,
+            description:`Opening stock: ${String(p.productId).slice(0,8)}`,
+          });
         }
       } else if (op.entity === 'product') {
         if (p.id !== op.entityId || p.organizationId !== organizationId) throw new Error('invalid_product_identity');

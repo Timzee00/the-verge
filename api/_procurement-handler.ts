@@ -208,7 +208,8 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
       await pool.query('ROLLBACK').catch(()=>undefined);
       if(error?.code==='23505')return json(res,409,{error:'supplier_name_in_use'});
       const message=String(error?.message??error);
-      if(message.endsWith('_too_long')||['supplier_name_required','invalid_email','invalid_supplier','supplier_not_found','supplier_has_open_purchase_orders'].includes(message))return json(res,400,{error:message});
+      if(message==='supplier_has_open_purchase_orders')return json(res,409,{error:message});
+      if(message.endsWith('_too_long')||['supplier_name_required','invalid_email','invalid_supplier','supplier_not_found'].includes(message))return json(res,400,{error:message});
       console.error('[procurement.supplier]',{name:error?.name,code:error?.code});
       return json(res,500,{error:'supplier_operation_failed'});
     } finally { await pool.end(); }
@@ -293,13 +294,12 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
     try {
       await pool.query('BEGIN');
       const order=await pool.query(
-        'select id,status from purchase_orders where id=$1 and organization_id=$2 for update',
+        'select id,status,location_id from purchase_orders where id=$1 and organization_id=$2 for update',
         [orderId,organizationId],
       );
       if(!order.rowCount)throw new Error('purchase_order_not_found');
-      if(order.rows[0].status!=='ordered')throw new Error('purchase_order_not_cancellable');
-      const received=await pool.query('select 1 from purchase_receipts where purchase_order_id=$1 limit 1',[orderId]);
-      if(received.rowCount)throw new Error('purchase_order_has_receipts');
+      if(!hasLocationAccess(String(order.rows[0].location_id)))throw new Error('location_access_denied');
+      if(!['ordered','partially_received'].includes(String(order.rows[0].status)))throw new Error('purchase_order_not_cancellable');
       await pool.query("update purchase_orders set status='cancelled',updated_at=now() where id=$1",[orderId]);
       await pool.query(`insert into audit_events (organization_id,actor_user_id,action,entity_type,entity_id,after_data,reason)
         values ($1,$2,'purchase_order.cancelled','purchase_order',$3,$4::jsonb,'Purchase order cancelled before receipt')`,
@@ -498,8 +498,9 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
     const pool=transactionPool();
     try {
       await pool.query('BEGIN');
-      const transfer=await pool.query('select id,status from stock_transfers where id=$1 and organization_id=$2 for update',[transferId,organizationId]);
+      const transfer=await pool.query('select id,status,from_location_id,to_location_id from stock_transfers where id=$1 and organization_id=$2 for update',[transferId,organizationId]);
       if(!transfer.rowCount)throw new Error('transfer_not_found');
+      if(!hasLocationAccess(String(transfer.rows[0].from_location_id))||!hasLocationAccess(String(transfer.rows[0].to_location_id)))throw new Error('location_access_denied');
       if(transfer.rows[0].status!=='draft')throw new Error('transfer_not_cancellable');
       await pool.query("update stock_transfers set status='cancelled',updated_at=now() where id=$1",[transferId]);
       await pool.query(`insert into audit_events (organization_id,actor_user_id,action,entity_type,entity_id,after_data,reason)

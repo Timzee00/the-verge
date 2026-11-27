@@ -53,7 +53,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try { email = cleanEmail(req.body?.email); }
       catch { await pool.query('ROLLBACK'); return json(res, 400, { error: 'invalid_email' }); }
       const role = String(req.body?.role ?? 'cashier');
-      const locationIds = Array.isArray(req.body?.locationIds) ? [...new Set(req.body.locationIds.map(String))] : [];
+      const locationIds: string[] = Array.isArray(req.body?.locationIds)
+        ? Array.from(new Set<string>((req.body.locationIds as unknown[]).map((value: unknown) => String(value))))
+        : [];
       if (!ASSIGNABLE_ROLES.has(role)) { await pool.query('ROLLBACK'); return json(res, 400, { error: 'invalid_staff_role' }); }
       if (!locationIds.length || locationIds.some(id=>! /^[0-9a-f-]{36}$/i.test(id))) { await pool.query('ROLLBACK'); return json(res, 400, { error: 'at_least_one_location_required' }); }
       const validLocations = await pool.query('select id from locations where organization_id=$1 and active=true and id=any($2::uuid[])', [organizationId,locationIds]);
@@ -97,7 +99,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const action = String(req.body?.action ?? 'deactivate');
     if (action === 'assign_locations') {
-      const locationIds = Array.isArray(req.body?.locationIds) ? [...new Set(req.body.locationIds.map(String))] : [];
+      const locationIds: string[] = Array.isArray(req.body?.locationIds)
+        ? Array.from(new Set<string>((req.body.locationIds as unknown[]).map((value: unknown) => String(value))))
+        : [];
       if (!locationIds.length || locationIds.some(id=>! /^[0-9a-f-]{36}$/i.test(id))) { await pool.query('ROLLBACK'); return json(res, 400, { error: 'at_least_one_location_required' }); }
       const validLocations = await pool.query('select id from locations where organization_id=$1 and active=true and id=any($2::uuid[])', [organizationId,locationIds]);
       if (validLocations.rowCount !== locationIds.length) { await pool.query('ROLLBACK'); return json(res, 400, { error: 'invalid_staff_location' }); }

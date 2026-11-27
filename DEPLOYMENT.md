@@ -33,4 +33,4 @@ Apply `db/migrations/*.sql` through the migration workflow. Validate on an isola
 
 ## Current release status
 
-The unified glass UI is committed to GitHub main, but it is not yet live. GitHub Actions run `46080317080` failed twice without job logs, and Vercel reported a build-rate-limit failure. The latest READY deployment is still on an older commit (`58cc1b9`). Do not treat the current source as released until CI passes, the exact main commit is deployed, and browser smoke tests pass.
+The unified glass UI is committed to GitHub main, but it is not yet live. Latest GitHub Actions run `46080702234` failed before job steps or logs were available, and Vercel's `timzee-deploy-format-test` check reports a build-rate-limit failure. The latest READY deployment is still on an older commit (`58cc1b9`). Do not treat the current source as released until CI passes, the exact main commit is deployed, and browser smoke tests pass.

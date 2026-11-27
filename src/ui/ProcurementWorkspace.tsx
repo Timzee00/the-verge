@@ -1,0 +1,276 @@
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { parseMajorToMinor } from '../domain/money';
+import type { Location, Product } from '../core/types';
+import type {
+  ProcurementSnapshot, PurchaseOrderRecord, StockTransferRecord,
+} from '../api';
+import { api } from '../api';
+import { localDB } from '../db/local';
+
+type Props = {
+  organizationId: string;
+  locations: Location[];
+  products: Product[];
+  onRefresh: () => Promise<void>;
+};
+
+type OrderLineDraft = { productId: string; quantity: string; unitCost: string };
+type TransferLineDraft = { productId: string; quantity: string };
+const emptyOrderLine=():OrderLineDraft=>({productId:'',quantity:'1',unitCost:'0.00'});
+const emptyTransferLine=():TransferLineDraft=>({productId:'',quantity:'1'});
+const money=(minor:number)=>new Intl.NumberFormat('en-NG',{style:'currency',currency:'NGN',maximumFractionDigits:2}).format(Number(minor)/100);
+const dateLabel=(value:string)=>new Intl.DateTimeFormat('en-NG',{dateStyle:'medium'}).format(new Date(value));
+
+export default function ProcurementWorkspace({organizationId,locations,products,onRefresh}:Props) {
+  const [snapshot,setSnapshot]=useState<ProcurementSnapshot|null>(null);
+  const [loading,setLoading]=useState(true);
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState('');
+  const [notice,setNotice]=useState('');
+  const [supplierName,setSupplierName]=useState('');
+  const [supplierPhone,setSupplierPhone]=useState('');
+  const [supplierEmail,setSupplierEmail]=useState('');
+  const [supplierAddress,setSupplierAddress]=useState('');
+  const [orderSupplierId,setOrderSupplierId]=useState('');
+  const [orderLocationId,setOrderLocationId]=useState('');
+  const [expectedAt,setExpectedAt]=useState('');
+  const [orderNotes,setOrderNotes]=useState('');
+  const [orderLines,setOrderLines]=useState<OrderLineDraft[]>([emptyOrderLine()]);
+  const [transferFromId,setTransferFromId]=useState('');
+  const [transferToId,setTransferToId]=useState('');
+  const [transferNotes,setTransferNotes]=useState('');
+  const [transferLines,setTransferLines]=useState<TransferLineDraft[]>([emptyTransferLine()]);
+  const [receiveDrafts,setReceiveDrafts]=useState<Record<string,Record<string,string>>>({});
+  const [section,setSection]=useState<'suppliers'|'purchases'|'transfers'>('suppliers');
+
+  async function load() {
+    setLoading(true);setError('');
+    try {
+      const data=await api.procurement(organizationId);
+      setSnapshot(data);
+      setOrderSupplierId(current=>current||data.suppliers.find(item=>item.active)?.id||'');
+      setOrderLocationId(current=>current||locations.find(item=>item.active)?.id||'');
+      setTransferFromId(current=>current||locations.find(item=>item.active)?.id||'');
+      setTransferToId(current=>current||locations.find(item=>item.active&&item.id!==transferFromId)?.id||'');
+      setReceiveDrafts(previous=>{
+        const next={...previous};
+        for(const order of data.purchaseOrders) {
+          const current={...(next[order.id]??{})};
+          for(const item of data.purchaseOrderItems.filter(item=>item.purchaseOrderId===order.id)) {
+            if(current[item.id]===undefined)current[item.id]=String(Math.max(0,item.quantityOrdered-item.quantityReceived));
+          }
+          next[order.id]=current;
+        }
+        return next;
+      });
+    } catch(err) {
+      setError(err instanceof Error?err.message:'Procurement records could not be loaded.');
+    } finally {setLoading(false);}
+  }
+  useEffect(()=>{void load();},[organizationId]);
+  useEffect(()=>{
+    if(!locations.some(item=>item.id===orderLocationId))setOrderLocationId(locations.find(item=>item.active)?.id??'');
+    if(!locations.some(item=>item.id===transferFromId))setTransferFromId(locations.find(item=>item.active)?.id??'');
+    if(!locations.some(item=>item.id===transferToId&&item.id!==transferFromId))setTransferToId(locations.find(item=>item.active&&item.id!==transferFromId)?.id??'');
+  },[locations,orderLocationId,transferFromId,transferToId]);
+
+  const activeSuppliers=useMemo(()=>snapshot?.suppliers.filter(item=>item.active)??[],[snapshot]);
+  const activeProducts=useMemo(()=>products.filter(item=>item.active).slice().sort((a,b)=>a.name.localeCompare(b.name)),[products]);
+  const orderItems=(order:PurchaseOrderRecord)=>snapshot?.purchaseOrderItems.filter(item=>item.purchaseOrderId===order.id)??[];
+  const transferItems=(transfer:StockTransferRecord)=>snapshot?.transferItems.filter(item=>item.transferId===transfer.id)??[];
+
+  async function refreshAfterChange(message:string) {
+    setNotice(message);await load();await onRefresh();
+  }
+
+  async function createSupplier(event:FormEvent<HTMLFormElement>) {
+    event.preventDefault();if(busy||!snapshot?.canManage)return;
+    setBusy(true);setError('');setNotice('');
+    try {
+      await api.procurementAction({organizationId,action:'create_supplier',name:supplierName,phone:supplierPhone,email:supplierEmail,addressLine1:supplierAddress});
+      setSupplierName('');setSupplierPhone('');setSupplierEmail('');setSupplierAddress('');
+      await refreshAfterChange('Supplier saved.');
+    } catch(err) {setError(err instanceof Error?err.message:'Supplier could not be saved.');}
+    finally {setBusy(false);}
+  }
+
+  async function changeSupplier(supplierId:string,action:'archive_supplier'|'restore_supplier') {
+    if(busy)return;
+    setBusy(true);setError('');setNotice('');
+    try {
+      await api.procurementAction({organizationId,action,supplierId});
+      await refreshAfterChange(action==='archive_supplier'?'Supplier archived.':'Supplier restored.');
+    } catch(err) {setError(err instanceof Error?err.message:'Supplier status could not be changed.');}
+    finally {setBusy(false);}
+  }
+
+  async function createPurchaseOrder(event:FormEvent<HTMLFormElement>) {
+    event.preventDefault();if(busy||!snapshot?.canManage)return;
+    setBusy(true);setError('');setNotice('');
+    try {
+      const items=orderLines.map(line=>{
+        const quantity=Number(line.quantity);
+        if(!line.productId||!Number.isSafeInteger(quantity)||quantity<=0)throw new Error('Every purchase line needs a product and a positive whole-number quantity.');
+        return {productId:line.productId,quantityOrdered:quantity,unitCostMinor:parseMajorToMinor(line.unitCost)};
+      });
+      if(new Set(items.map(item=>item.productId)).size!==items.length)throw new Error('A product can appear only once in the same purchase order.');
+      await api.procurementAction({organizationId,action:'create_purchase_order',supplierId:orderSupplierId,locationId:orderLocationId,expectedAt:expectedAt||undefined,notes:orderNotes,items});
+      setOrderNotes('');setExpectedAt('');setOrderLines([emptyOrderLine()]);
+      await refreshAfterChange('Purchase order created and sent to the supplier workflow.');
+    } catch(err) {setError(err instanceof Error?err.message:'Purchase order could not be created.');}
+    finally {setBusy(false);}
+  }
+
+  async function receivePurchaseOrder(order:PurchaseOrderRecord) {
+    if(busy)return;
+    const items=orderItems(order).map(item=>({purchaseOrderItemId:item.id,quantityReceived:Number(receiveDrafts[order.id]?.[item.id]??0)})).filter(item=>item.quantityReceived>0);
+    if(!items.length){setError('Enter at least one quantity to receive.');return;}
+    if(items.some(item=>!Number.isSafeInteger(item.quantityReceived))){setError('Received quantities must be positive whole numbers.');return;}
+    setBusy(true);setError('');setNotice('');
+    try {
+      const keyName=`purchaseReceiptKey:${organizationId}:${order.id}`;
+      const savedKey=await localDB.meta.get(keyName);
+      const idempotencyKey=savedKey?.value??crypto.randomUUID();
+      if(!savedKey)await localDB.meta.put({key:keyName,value:idempotencyKey});
+      const result=await api.procurementAction({organizationId,action:'receive_purchase_order',purchaseOrderId:order.id,idempotencyKey,items});
+      await localDB.meta.delete(keyName);
+      await refreshAfterChange(`Goods received. Receipt ${result.receipt?.id??''} is recorded and the inventory ledger has been updated.`);
+    } catch(err) {setError(err instanceof Error?err.message:'Purchase receipt could not be recorded. Retry using the same receipt details.');}
+    finally {setBusy(false);}
+  }
+
+  async function createTransfer(event:FormEvent<HTMLFormElement>) {
+    event.preventDefault();if(busy||!snapshot?.canManage)return;
+    setBusy(true);setError('');setNotice('');
+    try {
+      const items=transferLines.map(line=>{
+        const quantity=Number(line.quantity);
+        if(!line.productId||!Number.isSafeInteger(quantity)||quantity<=0)throw new Error('Every transfer line needs a product and a positive whole-number quantity.');
+        return {productId:line.productId,quantity};
+      });
+      if(new Set(items.map(item=>item.productId)).size!==items.length)throw new Error('A product can appear only once in the same transfer.');
+      await api.procurementAction({organizationId,action:'create_transfer',fromLocationId:transferFromId,toLocationId:transferToId,notes:transferNotes,items});
+      setTransferNotes('');setTransferLines([emptyTransferLine()]);
+      await refreshAfterChange('Stock transfer created as a draft.');
+    } catch(err) {setError(err instanceof Error?err.message:'Transfer could not be created.');}
+    finally {setBusy(false);}
+  }
+
+  async function advanceTransfer(transfer:StockTransferRecord,action:'dispatch_transfer'|'receive_transfer') {
+    if(busy)return;
+    const prompt=action==='dispatch_transfer'
+      ? `Dispatch ${transfer.reference}? Stock will be deducted from ${transfer.fromLocationName} and placed in transit.`
+      : `Confirm receipt of ${transfer.reference} at ${transfer.toLocationName}? Stock will be added to the destination.`;
+    if(!window.confirm(prompt))return;
+    setBusy(true);setError('');setNotice('');
+    try {
+      await api.procurementAction({organizationId,action,transferId:transfer.id});
+      await refreshAfterChange(action==='dispatch_transfer'?'Transfer dispatched. Stock is now in transit.':'Transfer received. Destination stock has been updated.');
+    } catch(err) {setError(err instanceof Error?err.message:'Transfer state could not be updated.');}
+    finally {setBusy(false);}
+  }
+
+  if(loading&&!snapshot)return <section className="panel procurement-loading">Loading suppliers, purchase orders and transfers…</section>;
+
+  return <section className="panel procurement-panel">
+    <div className="procurement-heading">
+      <div><span className="eyebrow">SUPPLIERS & STOCK MOVEMENT</span><h2>Purchasing and transfers</h2><p>Purchase orders track supplier deliveries. Transfers deduct stock at dispatch and add it only after the destination confirms receipt.</p></div>
+      {loading&&<span className="procurement-loading-label">Refreshing…</span>}
+    </div>
+    {notice&&<div className="procurement-feedback success" role="status">{notice}<button type="button" onClick={()=>setNotice('')} aria-label="Dismiss notice">×</button></div>}
+    {error&&<div className="procurement-feedback error" role="alert">{error}<button type="button" onClick={()=>setError('')} aria-label="Dismiss error">×</button></div>}
+    <div className="procurement-tabs" role="tablist" aria-label="Procurement sections">
+      <button type="button" role="tab" aria-selected={section==='suppliers'} className={section==='suppliers'?'active':''} onClick={()=>setSection('suppliers')}>Suppliers <span>{snapshot?.suppliers.length??0}</span></button>
+      <button type="button" role="tab" aria-selected={section==='purchases'} className={section==='purchases'?'active':''} onClick={()=>setSection('purchases')}>Purchase orders <span>{snapshot?.purchaseOrders.length??0}</span></button>
+      <button type="button" role="tab" aria-selected={section==='transfers'} className={section==='transfers'?'active':''} onClick={()=>setSection('transfers')}>Transfers <span>{snapshot?.transfers.length??0}</span></button>
+    </div>
+
+    {section==='suppliers'&&<div className="procurement-content">
+      {snapshot?.canManage&&<form className="procurement-form supplier-form" onSubmit={createSupplier}>
+        <div className="procurement-form-heading"><div><strong>Add supplier</strong><small>Supplier records are shared by all locations in this business.</small></div></div>
+        <label>Supplier name<input required maxLength={140} value={supplierName} onChange={e=>setSupplierName(e.target.value)} placeholder="Supplier or company name"/></label>
+        <label>Phone<input type="tel" maxLength={40} value={supplierPhone} onChange={e=>setSupplierPhone(e.target.value)} placeholder="+234…"/></label>
+        <label>Email<input type="email" maxLength={320} value={supplierEmail} onChange={e=>setSupplierEmail(e.target.value)} placeholder="orders@supplier.com"/></label>
+        <label>Address<input maxLength={160} value={supplierAddress} onChange={e=>setSupplierAddress(e.target.value)} placeholder="Street or business address"/></label>
+        <button className="primary" type="submit" disabled={busy||!supplierName.trim()}>{busy?'Saving…':'Save supplier'}</button>
+      </form>}
+      <div className="procurement-list">
+        {(snapshot?.suppliers??[]).map(supplier=><article className="procurement-list-card" key={supplier.id}>
+          <div><strong>{supplier.name}</strong><small>{[supplier.phone,supplier.email,supplier.addressLine1].filter(Boolean).join(' · ')||'No contact details'}</small></div>
+          <div className="procurement-actions"><span className={supplier.active?'procurement-status active':'procurement-status inactive'}>{supplier.active?'Active':'Archived'}</span>{snapshot?.canManage&&<button type="button" className="secondary" disabled={busy} onClick={()=>void changeSupplier(supplier.id,supplier.active?'archive_supplier':'restore_supplier')}>{supplier.active?'Archive':'Restore'}</button>}</div>
+        </article>)}
+        {!snapshot?.suppliers.length&&<div className="procurement-empty">No suppliers have been added yet.</div>}
+      </div>
+    </div>}
+
+    {section==='purchases'&&<div className="procurement-content">
+      {snapshot?.canManage&&<form className="procurement-form" onSubmit={createPurchaseOrder}>
+        <div className="procurement-form-heading"><div><strong>Create purchase order</strong><small>Ordering records the commitment. Inventory and accounts payable change only when goods are received.</small></div></div>
+        <div className="procurement-form-grid">
+          <label>Supplier<select required value={orderSupplierId} onChange={e=>setOrderSupplierId(e.target.value)}><option value="">Choose supplier</option>{activeSuppliers.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label>Receiving location<select required value={orderLocationId} onChange={e=>setOrderLocationId(e.target.value)}><option value="">Choose location</option>{locations.filter(item=>item.active).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label>Expected delivery<input type="date" value={expectedAt} onChange={e=>setExpectedAt(e.target.value)}/></label>
+          <label>Order note<input maxLength={500} value={orderNotes} onChange={e=>setOrderNotes(e.target.value)} placeholder="Optional delivery instructions"/></label>
+        </div>
+        <div className="procurement-line-editor">
+          {orderLines.map((line,index)=><div className="procurement-line" key={index}>
+            <label>Product<select required value={line.productId} onChange={e=>setOrderLines(rows=>rows.map((row,i)=>i===index?{...row,productId:e.target.value}:row))}><option value="">Choose product</option>{activeProducts.map(item=><option key={item.id} value={item.id}>{item.name} · {item.sku}</option>)}</select></label>
+            <label>Quantity<input required type="number" min="1" step="1" inputMode="numeric" value={line.quantity} onChange={e=>setOrderLines(rows=>rows.map((row,i)=>i===index?{...row,quantity:e.target.value}:row))}/></label>
+            <label>Unit cost (₦)<input required inputMode="decimal" value={line.unitCost} onChange={e=>setOrderLines(rows=>rows.map((row,i)=>i===index?{...row,unitCost:e.target.value}:row))}/></label>
+            <button type="button" className="text-btn" disabled={orderLines.length===1} onClick={()=>setOrderLines(rows=>rows.filter((_,i)=>i!==index))} aria-label="Remove purchase line">Remove</button>
+          </div>)}
+          <button type="button" className="secondary add-procurement-line" onClick={()=>setOrderLines(rows=>[...rows,emptyOrderLine()])}>Add another product</button>
+        </div>
+        <button className="primary" type="submit" disabled={busy||!orderSupplierId||!orderLocationId||!activeSuppliers.length||!activeProducts.length}>{busy?'Saving order…':'Create purchase order'}</button>
+      </form>}
+      <div className="procurement-list">
+        {(snapshot?.purchaseOrders??[]).map(order=>{
+          const items=orderItems(order);
+          const pending=items.some(item=>item.quantityReceived<item.quantityOrdered);
+          return <article className="procurement-order-card" key={order.id}>
+            <div className="procurement-order-header"><div><strong>{order.reference}</strong><small>{order.supplierName} · {order.locationName} · {dateLabel(order.orderedAt)}</small></div><span className={'procurement-status '+order.status}>{order.status.replace('_',' ')}</span></div>
+            {items.map(item=>{
+              const remaining=item.quantityOrdered-item.quantityReceived;
+              return <div className="procurement-order-line" key={item.id}>
+                <div><strong>{item.productName}</strong><small>{item.sku} · {item.quantityReceived}/{item.quantityOrdered} received · {money(item.unitCostMinor)} each</small></div>
+                {pending&&remaining>0&&<label>Receive now<input type="number" min="0" max={remaining} step="1" inputMode="numeric" value={receiveDrafts[order.id]?.[item.id]??String(remaining)} onChange={e=>setReceiveDrafts(previous=>({...previous,[order.id]:{...(previous[order.id]??{}),[item.id]:e.target.value}}))}/></label>}
+              </div>;
+            })}
+            {pending&&snapshot?.canManage&&<div className="procurement-order-footer"><span>Remaining lines can be received in multiple deliveries.</span><button type="button" className="primary" disabled={busy} onClick={()=>void receivePurchaseOrder(order)}>Record delivery</button></div>}
+          </article>;
+        })}
+        {!snapshot?.purchaseOrders.length&&<div className="procurement-empty">No purchase orders yet. Create an order to record an expected supplier delivery.</div>}
+      </div>
+    </div>}
+
+    {section==='transfers'&&<div className="procurement-content">
+      {snapshot?.canManage&&<form className="procurement-form" onSubmit={createTransfer}>
+        <div className="procurement-form-heading"><div><strong>Create stock transfer</strong><small>Transfers must be dispatched before the destination can receive them.</small></div></div>
+        <div className="procurement-form-grid">
+          <label>From location<select required value={transferFromId} onChange={e=>setTransferFromId(e.target.value)}><option value="">Source location</option>{locations.filter(item=>item.active).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label>To location<select required value={transferToId} onChange={e=>setTransferToId(e.target.value)}><option value="">Destination location</option>{locations.filter(item=>item.active&&item.id!==transferFromId).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label className="transfer-note">Note<input maxLength={500} value={transferNotes} onChange={e=>setTransferNotes(e.target.value)} placeholder="Reason or handling instructions"/></label>
+        </div>
+        <div className="procurement-line-editor">
+          {transferLines.map((line,index)=><div className="procurement-line transfer-line" key={index}>
+            <label>Product<select required value={line.productId} onChange={e=>setTransferLines(rows=>rows.map((row,i)=>i===index?{...row,productId:e.target.value}:row))}><option value="">Choose product</option>{activeProducts.map(item=><option key={item.id} value={item.id}>{item.name} · {item.sku}</option>)}</select></label>
+            <label>Quantity<input required type="number" min="1" step="1" inputMode="numeric" value={line.quantity} onChange={e=>setTransferLines(rows=>rows.map((row,i)=>i===index?{...row,quantity:e.target.value}:row))}/></label>
+            <button type="button" className="text-btn" disabled={transferLines.length===1} onClick={()=>setTransferLines(rows=>rows.filter((_,i)=>i!==index))}>Remove</button>
+          </div>)}
+          <button type="button" className="secondary add-procurement-line" onClick={()=>setTransferLines(rows=>[...rows,emptyTransferLine()])}>Add another product</button>
+        </div>
+        <button className="primary" type="submit" disabled={busy||!transferFromId||!transferToId||transferFromId===transferToId||!activeProducts.length}>Create draft transfer</button>
+      </form>}
+      <div className="procurement-list">
+        {(snapshot?.transfers??[]).map(transfer=><article className="procurement-order-card" key={transfer.id}>
+          <div className="procurement-order-header"><div><strong>{transfer.reference}</strong><small>{transfer.fromLocationName} → {transfer.toLocationName} · {dateLabel(transfer.createdAt)}</small></div><span className={'procurement-status '+transfer.status}>{transfer.status}</span></div>
+          {transferItems(transfer).map(item=><div className="procurement-order-line" key={item.id}><div><strong>{item.productName}</strong><small>{item.sku} · {item.quantity.toLocaleString('en-NG')} units · {money(item.unitCostMinor)} unit cost</small></div></div>)}
+          {transfer.status==='draft'&&<div className="procurement-order-footer"><span>Dispatch deducts stock from the source and records in-transit value.</span><button type="button" className="primary" disabled={busy} onClick={()=>void advanceTransfer(transfer,'dispatch_transfer')}>Dispatch</button></div>}
+          {transfer.status==='dispatched'&&<div className="procurement-order-footer"><span>Stock is in transit. Confirm the received quantity at destination before closing the transfer.</span><button type="button" className="primary" disabled={busy} onClick={()=>void advanceTransfer(transfer,'receive_transfer')}>Confirm receipt</button></div>}
+          {transfer.status==='received'&&<div className="procurement-order-footer"><span>Received at destination{transfer.receivedAt?' · '+dateLabel(transfer.receivedAt):''}</span></div>}
+        </article>)}
+        {!snapshot?.transfers.length&&<div className="procurement-empty">No stock transfers have been created yet.</div>}
+      </div>
+    </div>}
+  </section>;
+}

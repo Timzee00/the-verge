@@ -277,7 +277,7 @@ export default function ProcurementWorkspace({organizationId,locations,products,
       </form>}
       <div className="procurement-list">
         {(snapshot?.suppliers??[]).map(supplier=><article className="procurement-list-card" key={supplier.id}>
-          <div><strong>{supplier.name}</strong><small>{[supplier.phone,supplier.email,supplier.addressLine1].filter(Boolean).join(' · ')||'No contact details'}</small></div>
+          <div><strong>{supplier.name}</strong><small>{[supplier.phone,supplier.email,supplier.addressLine1].filter(Boolean).join(' · ')||'No contact details'}</small><small>Received goods value: {money((snapshot?.purchaseReceipts??[]).filter(receipt=>receipt.supplierId===supplier.id).reduce((sum,receipt)=>sum+receipt.totalCostMinor,0))} · Before supplier payments</small></div>
           <div className="procurement-actions"><span className={supplier.active?'procurement-status active':'procurement-status inactive'}>{supplier.active?'Active':'Archived'}</span>{snapshot?.canManage&&<>{supplier.active&&<button type="button" className="secondary" disabled={busy} onClick={()=>editSupplier(supplier)}>Edit</button>}<button type="button" className="secondary" disabled={busy} onClick={()=>void changeSupplier(supplier.id,supplier.active?'archive_supplier':'restore_supplier')}>{supplier.active?'Archive':'Restore'}</button></>}</div>
         </article>)}
         {!snapshot?.suppliers.length&&<div className="procurement-empty">No suppliers have been added yet.</div>}
@@ -307,7 +307,7 @@ export default function ProcurementWorkspace({organizationId,locations,products,
       <div className="procurement-list">
         {(snapshot?.purchaseOrders??[]).map(order=>{
           const items=orderItems(order);
-          const pending=items.some(item=>item.quantityReceived<item.quantityOrdered);
+          const pending=order.status!=='cancelled'&&order.status!=='received'&&items.some(item=>item.quantityReceived<item.quantityOrdered);
           return <article className="procurement-order-card" key={order.id}>
             <div className="procurement-order-header"><div><strong>{order.reference}</strong><small>{order.supplierName} · {order.locationName} · {dateLabel(order.orderedAt)}</small></div><span className={'procurement-status '+order.status}>{order.status.replace('_',' ')}</span></div>
             {items.map(item=>{

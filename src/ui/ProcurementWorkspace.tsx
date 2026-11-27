@@ -79,6 +79,7 @@ export default function ProcurementWorkspace({organizationId,locations,products,
       const pendingReceipts=await Promise.all(data.purchaseOrders.map(async order=>{
         const saved=await localDB.meta.get(`purchaseReceiptKey:${organizationId}:${order.id}`);
         if(!saved)return null;
+        if(order.status==='cancelled') { await localDB.meta.delete(`purchaseReceiptKey:${organizationId}:${order.id}`); return null; }
         try {
           const stored=JSON.parse(saved.value) as {payload?:string};
           const items=stored.payload?JSON.parse(stored.payload) as Array<{purchaseOrderItemId:string;quantityReceived:number}>:[];
@@ -342,7 +343,7 @@ export default function ProcurementWorkspace({organizationId,locations,products,
       <div className="procurement-list">
         {(snapshot?.purchaseOrders??[]).map(order=>{
           const items=orderItems(order);
-          const pending=pendingReceiptIds.includes(order.id)||(order.status!=='cancelled'&&order.status!=='received'&&items.some(item=>item.quantityReceived<item.quantityOrdered));
+          const pending=order.status!=='cancelled'&&(pendingReceiptIds.includes(order.id)||(order.status!=='received'&&items.some(item=>item.quantityReceived<item.quantityOrdered)));
           return <article className="procurement-order-card" key={order.id}>
             <div className="procurement-order-header"><div><strong>{order.reference}</strong><small>{order.supplierName} · {order.locationName} · {dateLabel(order.orderedAt)}</small></div><span className={'procurement-status '+order.status}>{order.status.replace('_',' ')}</span></div>
             {items.map(item=>{

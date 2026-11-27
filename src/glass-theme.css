@@ -248,7 +248,8 @@ button:active:not(:disabled) { transform: translateY(1px); }
 @media (max-width: 520px) {
   .content { padding-left: 10px; padding-right: 10px; }
   .panel, .procurement-panel { border-radius: 16px; padding: 13px; }
-  .stat-grid, .action-grid, .tag-grid, .account-grid, .sales-grid { grid-template-columns: minmax(0,1fr); }
+  .stat-grid, .action-grid, .tag-grid, .account-grid { grid-template-columns: minmax(0,1fr); }
+  .sales-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .business-location-card, .procurement-list-card { align-items: stretch; flex-direction: column; }
   .business-location-actions, .procurement-actions { width: 100%; }
   .business-location-actions button, .procurement-actions button { flex: 1 1 auto; }

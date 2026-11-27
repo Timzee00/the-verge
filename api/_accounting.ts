@@ -1,4 +1,4 @@
-import { assertBalanced, buildExpenseJournalLines, buildSaleJournalLines } from '../src/domain/accounting.js';
+import { assertBalanced, buildExpenseJournalLines, buildPurchaseJournalLines, buildSaleJournalLines, buildTransferJournalLines } from '../src/domain/accounting.js';
 
 type QueryClient = {
   query: (text: string, values?: unknown[]) => Promise<{ rows: any[]; rowCount: number | null }>;
@@ -9,6 +9,7 @@ const ACCOUNT_SEEDS = [
   { code: '1010', name: 'Bank', accountClass: 'asset', normalBalance: 'debit' },
   { code: '1100', name: 'Accounts Receivable', accountClass: 'asset', normalBalance: 'debit' },
   { code: '1200', name: 'Inventory', accountClass: 'asset', normalBalance: 'debit' },
+  { code: '1210', name: 'Inventory in Transit', accountClass: 'asset', normalBalance: 'debit' },
   { code: '2000', name: 'Accounts Payable', accountClass: 'liability', normalBalance: 'credit' },
   { code: '3000', name: 'Owner Equity', accountClass: 'equity', normalBalance: 'credit' },
   { code: '4000', name: 'Sales Revenue', accountClass: 'revenue', normalBalance: 'credit' },
@@ -56,7 +57,7 @@ export async function createPostedJournal(
   input: {
     organizationId: string;
     locationId: string;
-    sourceType: 'sale' | 'expense';
+    sourceType: 'sale' | 'expense' | 'purchase' | 'transfer';
     sourceId: string;
     description: string;
     occurredAt: string;
@@ -172,6 +173,52 @@ export async function postExpenseJournal(
   return createPostedJournal(client, {
     organizationId: input.organizationId, locationId: input.locationId, sourceType: 'expense',
     sourceId: input.sourceId, description: `${input.category}: ${input.description}`.slice(0, 240),
+    occurredAt: input.occurredAt, createdBy: input.createdBy, lines,
+  });
+}
+
+export async function postPurchaseReceiptJournal(
+  client: QueryClient,
+  input: {
+    organizationId: string; locationId: string; sourceId: string; occurredAt: string; createdBy: string;
+    totalCostMinor: number; supplierName: string;
+  },
+) {
+  const accounts = await ensureAccountingAccounts(client, input.organizationId);
+  const lines: JournalLineInput[] = buildPurchaseJournalLines({
+    inventoryAccountId: accounts['1200'],
+    payableAccountId: accounts['2000'],
+    totalCostMinor: input.totalCostMinor,
+  }).map((line,index)=>({...line,memo:index===0?'Received inventory':`Supplier payable: ${input.supplierName}`}));
+  return createPostedJournal(client, {
+    organizationId: input.organizationId, locationId: input.locationId, sourceType: 'purchase',
+    sourceId: input.sourceId, description: `Supplier receipt: ${input.supplierName}`.slice(0,240),
+    occurredAt: input.occurredAt, createdBy: input.createdBy, lines,
+  });
+}
+
+export async function postTransferJournal(
+  client: QueryClient,
+  input: {
+    organizationId: string; locationId: string; sourceId: string; occurredAt: string; createdBy: string;
+    transferCostMinor: number; reference: string; stage: 'dispatch'|'receive';
+  },
+) {
+  const accounts = await ensureAccountingAccounts(client, input.organizationId);
+  const lines: JournalLineInput[] = buildTransferJournalLines({
+    inventoryAccountId: accounts['1200'],
+    inTransitAccountId: accounts['1210'],
+    transferCostMinor: input.transferCostMinor,
+    stage: input.stage,
+  }).map((line,index)=>({
+    ...line,
+    memo: input.stage==='dispatch'
+      ? (index===0?'Stock value dispatched to transit':'Inventory issued from source location')
+      : (index===0?'Stock value received at destination':'Inventory in-transit cleared'),
+  }));
+  return createPostedJournal(client, {
+    organizationId: input.organizationId, locationId: input.locationId, sourceType: 'transfer',
+    sourceId: input.sourceId, description: `Transfer ${input.reference} · ${input.stage}`,
     occurredAt: input.occurredAt, createdBy: input.createdBy, lines,
   });
 }

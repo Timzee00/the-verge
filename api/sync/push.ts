@@ -110,7 +110,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const row=prior.rows[0];
           if(!row || String(row.organization_id)!==organizationId || String(row.location_id)!==p.locationId || String(row.product_id)!==p.productId || row.event_type!==p.type || Number(row.quantity_delta)!==quantityDelta || String(row.device_id)!==op.deviceId || Number(row.local_sequence)!==op.localSequence || String(row.reference_id??'')!==String(p.referenceId??'')) throw new Error('inventory_event_id_collision');
         }
-        if(p.type==='opening'&&quantityDelta>0&&unitCostMinor>0) {
+        if((p.type==='opening'||(p.type==='purchase'&&!p.referenceId))&&quantityDelta>0&&unitCostMinor>0) {
           const openingValue=quantityDelta*unitCostMinor;
           if(!Number.isSafeInteger(openingValue))throw new Error('opening_inventory_value_overflow');
           await postOpeningInventoryJournal(pool,{

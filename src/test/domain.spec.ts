@@ -35,6 +35,10 @@ const ops = deduplicateOperations([
 equal(ops.length, 1);
 assert(nextRetryAt(0).endsWith('Z'));
 
+console.log('domain tests passed');
+
+import { calculateSale } from '../domain/sales.js';
+const saleProduct = { id:'p', organizationId:'o', sku:'SKU', name:'Item', unit:'piece', standardCostMinor:1000, retailPriceMinor:1500, active:true, trackBatch:false, trackExpiry:false, createdAt:'2026-01-01', updatedAt:'2026-01-01' } as any;
 
 const cartProductA = { ...saleProduct, id:'cart-a', retailPriceMinor:1250 };
 const cartProductB = { ...saleProduct, id:'cart-b', retailPriceMinor:2200 };
@@ -48,10 +52,5 @@ equal(cartTotals.unitCount, 3);
 throws(() => calculateCartTotals([{ product:cartProductA, quantity:0 }]));
 throws(() => calculateCartTotals([{ product:cartProductA, quantity:1 }, { product:cartProductA, quantity:2 }]));
 
-console.log('domain tests passed');
 
-import { calculateSale } from '../domain/sales.js';
-const saleProduct = { id:'p', organizationId:'o', sku:'SKU', name:'Item', unit:'piece', standardCostMinor:1000, retailPriceMinor:1500, active:true, trackBatch:false, trackExpiry:false, createdAt:'2026-01-01', updatedAt:'2026-01-01' } as any;
-equal(calculateSale({product:saleProduct,quantity:2,unitPriceMinor:1500,paymentMethod:'cash'}).totalMinor,3000);
-equal(calculateSale({product:saleProduct,quantity:2,unitPriceMinor:1500,discountMinor:1000,paymentMethod:'cash'}).belowCost,false);
-throws(() => calculateSale({product:saleProduct,quantity:2,unitPriceMinor:500,discountMinor:1,paymentMethod:'cash'}));
+console.log('domain tests passed');

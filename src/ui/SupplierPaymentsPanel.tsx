@@ -95,12 +95,12 @@ export default function SupplierPaymentsPanel({organizationId,snapshot,onSaved}:
         await localDB.meta.put({key:keyName,value:JSON.stringify({id:idempotencyKey,payload,request})});
       }
       const result=await api.procurementAction({organizationId,action:'record_supplier_payment',idempotencyKey,...request});
+      setNotice(`Payment recorded: ${money(result.supplierPayment?.amountMinor??amountMinor)}. The supplier payable journal has been updated.`);
+      await onSaved();
       await localDB.meta.delete(keyName);
       setPendingPayment(null);
       setAmount('');setReference('');
       setReceiptId('');
-      setNotice(`Payment recorded: ${money(result.supplierPayment?.amountMinor??amountMinor)}. The supplier payable journal has been updated.`);
-      await onSaved();
     } catch(err) {
       setError(err instanceof Error?err.message:'Supplier payment could not be recorded. Retry the same details to safely confirm its status.');
     } finally {setBusy(false);}

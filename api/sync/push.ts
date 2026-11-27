@@ -72,21 +72,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (p.type === 'sale') throw new Error('sale_requires_pos_transaction');
         if (!Number.isFinite(Number(p.quantityDelta)) || Number(p.quantityDelta) === 0) throw new Error('invalid_inventory_quantity');
         if (p.type === 'sale_void' || p.type === 'return') throw new Error('return_or_void_requires_approval_workflow');
-        if (false) {
-          await pool.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [`inventory:${organizationId}:${p.locationId}:${p.productId}`]);
-          const stockResult = await pool.query(`
-            select coalesce(sum(case when event_type not in ('reservation','reservation_release') then quantity_delta else 0 end),0) as stock
-            from inventory_events
-            where organization_id=$1 and location_id=$2 and product_id=$3`, [organizationId, p.locationId, p.productId]);
-          const stock = Number(stockResult.rows[0]?.stock ?? 0);
-          const required = Math.abs(Number(p.quantityDelta));
-          if (!Number.isFinite(required) || required <= 0 || stock < required) {
-            await pool.query('ROLLBACK');
-            results.push({ id: op.id, ok: false, conflict: true, error: 'insufficient_stock' });
-            continue;
-          }
-        }
-
         await pool.query(`insert into inventory_events (id,organization_id,location_id,product_id,event_type,quantity_delta,unit_cost_minor,reference_id,occurred_at,device_id,local_sequence,created_at,created_by)
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
           on conflict (id) do nothing`, [p.id, organizationId, p.locationId, p.productId, p.type, p.quantityDelta, p.unitCostMinor ?? null, p.referenceId ?? null, p.occurredAt, op.deviceId, op.localSequence, p.createdAt ?? new Date().toISOString(), user.id]);

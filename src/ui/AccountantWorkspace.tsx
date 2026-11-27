@@ -1,6 +1,7 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { Expense, JournalEntry, JournalLine, Location, Sale, SaleItem } from '../core/types';
-import type { AccountBalance } from '../api';
+import { api, type AccountBalance, type ProcurementSnapshot } from '../api';
+import SupplierPaymentsPanel from './SupplierPaymentsPanel';
 import type { SessionOrg } from '../api';
 import './staff-workspace.css';
 
@@ -23,6 +24,7 @@ type Props = {
   onOrganizationChange: (id: string) => Promise<void>;
   onLocationChange: (id: string) => void;
   onRecordExpense: (input:{amount:string;category:string;description:string;paymentMethod:Expense['paymentMethod']}) => Promise<Expense>;
+  onRefresh: () => Promise<void>;
   onLogout: () => Promise<void>;
 };
 
@@ -37,7 +39,7 @@ export default function AccountantWorkspace(props: Props) {
   const {
     userId, userEmail, organizationId, organizationName, organizations, locations,
     locationId, sales, saleItems, expenses, journals, journalLines, balances, online, pending, onOrganizationChange,
-    onLocationChange, onRecordExpense, onLogout,
+    onLocationChange, onRecordExpense, onRefresh, onLogout,
   } = props;
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('Utilities');
@@ -46,6 +48,14 @@ export default function AccountantWorkspace(props: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [procurement,setProcurement] = useState<ProcurementSnapshot|null>(null);
+  const [procurementError,setProcurementError] = useState('');
+
+  useEffect(()=>{
+    let live=true;
+    api.procurement(organizationId).then(data=>{if(live)setProcurement(data);}).catch(err=>{if(live)setProcurementError(err instanceof Error?err.message:'Supplier payable records could not be loaded.');});
+    return()=>{live=false;};
+  },[organizationId]);
 
   const location = locations.find(item => item.id === locationId);
   const locationSales = useMemo(() => sales.filter(sale => sale.locationId === locationId), [sales, locationId]);
@@ -175,6 +185,12 @@ export default function AccountantWorkspace(props: Props) {
         </div>
         <p className="accountant-disclaimer">Balances are computed from all posted journals returned by the server, not just the 30 most recently displayed entries.</p>
       </section>
+      {procurement?.canPaySuppliers&&<SupplierPaymentsPanel organizationId={organizationId} snapshot={procurement} onSaved={async()=>{
+        try { setProcurement(await api.procurement(organizationId)); setProcurementError(''); }
+        catch(err) { setProcurementError(err instanceof Error?err.message:'Supplier payable records could not be refreshed.'); }
+        await onRefresh();
+      }}/>}
+      {procurementError&&<div className="staff-notice" role="alert">{procurementError}<button type="button" onClick={()=>setProcurementError('')} aria-label="Dismiss error">×</button></div>}
       <section className="panel accountant-records-panel">
         <div className="accountant-records-heading"><div><span className="eyebrow">DOUBLE-ENTRY LEDGER</span><h2>Posted journal entries</h2></div><span>{locationJournals.length} loaded</span></div>
         {locationJournals.length ? <div className="accountant-record-list">{locationJournals.slice(0,30).map(entry => {

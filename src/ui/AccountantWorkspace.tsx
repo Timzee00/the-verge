@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import type { Expense, JournalEntry, JournalLine, Location, Sale, SaleItem } from '../core/types';
+import type { AccountBalance } from '../api';
 import type { SessionOrg } from '../api';
 import './staff-workspace.css';
 
@@ -16,6 +17,7 @@ type Props = {
   expenses: Expense[];
   journals: JournalEntry[];
   journalLines: JournalLine[];
+  balances: AccountBalance[];
   online: boolean;
   pending: number;
   onOrganizationChange: (id: string) => Promise<void>;
@@ -34,7 +36,7 @@ const dateTime = (value: string) => new Intl.DateTimeFormat('en-NG', {
 export default function AccountantWorkspace(props: Props) {
   const {
     userId, userEmail, organizationId, organizationName, organizations, locations,
-    locationId, sales, saleItems, expenses, journals, journalLines, online, pending, onOrganizationChange,
+    locationId, sales, saleItems, expenses, journals, journalLines, balances, online, pending, onOrganizationChange,
     onLocationChange, onRecordExpense, onLogout,
   } = props;
   const [amount, setAmount] = useState('');
@@ -54,6 +56,17 @@ export default function AccountantWorkspace(props: Props) {
   const locationJournals = useMemo(() => journals.filter(entry => !entry.locationId || entry.locationId === locationId), [journals, locationId]);
   const locationJournalIds = useMemo(() => new Set(locationJournals.map(entry => entry.id)), [locationJournals]);
   const visibleJournalLines = useMemo(() => journalLines.filter(line => locationJournalIds.has(line.journalEntryId)), [journalLines, locationJournalIds]);
+  const branchBalances = useMemo(() => balances.filter(row => row.locationId === locationId || row.locationId === null), [balances, locationId]);
+  const accountBalances = useMemo(() => branchBalances.reduce((map,row) => {
+    const current=map.get(row.accountId)??{debitMinor:0,creditMinor:0};
+    current.debitMinor+=row.debitMinor;current.creditMinor+=row.creditMinor;
+    map.set(row.accountId,current);return map;
+  },new Map<string,{debitMinor:number;creditMinor:number}>()),[branchBalances]);
+  const trialTotals = useMemo(() => {
+    let debitMinor=0,creditMinor=0;
+    for(const row of branchBalances){debitMinor+=row.debitMinor;creditMinor+=row.creditMinor;}
+    return {debitMinor,creditMinor,balanced:debitMinor===creditMinor};
+  },[branchBalances]);
   const totals = useMemo(() => {
     const revenue = completedSales.reduce((sum, sale) => sum + Number(sale.totalMinor), 0);
     const cogs = locationSaleItems.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitCostMinor)), 0);
@@ -144,6 +157,25 @@ export default function AccountantWorkspace(props: Props) {
           : <div className="staff-empty">No completed sales are available for your assigned locations yet.</div>}
       </section>
 
+      <section className="panel accountant-records-panel">
+        <div className="accountant-records-heading"><div><span className="eyebrow">TRIAL BALANCE</span><h2>Branch account balances</h2></div><span className={trialTotals.balanced?'staff-sync-pill is-synced':'staff-sync-pill'}>{trialTotals.balanced?'Debits equal credits':'Out of balance'}</span></div>
+        <div className="accountant-stats trial-balance-totals">
+          <article><span>Total debits</span><strong>{money(trialTotals.debitMinor)}</strong></article>
+          <article><span>Total credits</span><strong>{money(trialTotals.creditMinor)}</strong></article>
+        </div>
+        <div className="accountant-record-list">
+          {Array.from(accountBalances.entries()).map(([accountId,balance])=>{
+            const account=undefined;
+            return <article key={accountId}>
+              <div><strong>{accountId}</strong><small>Ledger account</small></div>
+              <div className="accountant-record-amount"><strong>{money(balance.debitMinor)}</strong><small>Debit</small></div>
+              <div className="accountant-record-amount"><strong>{money(balance.creditMinor)}</strong><small>Credit</small></div>
+            </article>;
+          })}
+          {!accountBalances.size&&<div className="staff-empty">No posted balances are recorded for this location yet.</div>}
+        </div>
+        <p className="accountant-disclaimer">Balances are computed from all posted journals returned by the server, not just the 30 most recently displayed entries.</p>
+      </section>
       <section className="panel accountant-records-panel">
         <div className="accountant-records-heading"><div><span className="eyebrow">DOUBLE-ENTRY LEDGER</span><h2>Posted journal entries</h2></div><span>{locationJournals.length} loaded</span></div>
         {locationJournals.length ? <div className="accountant-record-list">{locationJournals.slice(0,30).map(entry => {

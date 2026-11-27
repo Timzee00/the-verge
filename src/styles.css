@@ -322,3 +322,13 @@ body[data-theme="dark"] .auth-notice{color:#8fe0b8;background:rgba(28,164,104,.1
   .procurement-order-header { align-items:flex-start; flex-direction:column; }
   .procurement-order-line { align-items:flex-start; }
 }
+
+
+.supplier-form-actions { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:8px; }
+.procurement-receipt-history { display:grid; gap:10px; padding:13px; border:1px solid var(--line); border-radius:11px; background:var(--surface-soft); }
+.procurement-receipt-history .procurement-form-heading { margin-bottom:2px; }
+.procurement-receipt-history .procurement-list-card { background:var(--surface); }
+@media (max-width:760px) {
+  .supplier-form-actions { align-items:stretch; flex-direction:column; }
+  .supplier-form-actions button { width:100%; }
+}

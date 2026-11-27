@@ -44,13 +44,17 @@ export default function AccountantWorkspace(props: Props) {
   const [notice, setNotice] = useState('');
 
   const location = locations.find(item => item.id === locationId);
-  const completedSales = useMemo(() => sales.filter(sale => sale.status === 'completed'), [sales]);
+  const locationSales = useMemo(() => sales.filter(sale => sale.locationId === locationId), [sales, locationId]);
+  const completedSales = useMemo(() => locationSales.filter(sale => sale.status === 'completed'), [locationSales]);
+  const locationSaleIds = useMemo(() => new Set(locationSales.map(sale => sale.id)), [locationSales]);
+  const locationSaleItems = useMemo(() => saleItems.filter(item => locationSaleIds.has(item.saleId)), [saleItems, locationSaleIds]);
+  const locationExpenses = useMemo(() => expenses.filter(item => item.locationId === locationId), [expenses, locationId]);
   const totals = useMemo(() => {
     const revenue = completedSales.reduce((sum, sale) => sum + Number(sale.totalMinor), 0);
-    const cogs = saleItems.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitCostMinor)), 0);
-    const expenseTotal = expenses.reduce((sum, item) => sum + Number(item.amountMinor), 0);
+    const cogs = locationSaleItems.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitCostMinor)), 0);
+    const expenseTotal = locationExpenses.reduce((sum, item) => sum + Number(item.amountMinor), 0);
     return { revenue, cogs, expenseTotal, remainder: revenue - cogs - expenseTotal };
-  }, [completedSales, saleItems, expenses]);
+  }, [completedSales, locationSaleItems, locationExpenses]);
 
   async function submitExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -99,7 +103,7 @@ export default function AccountantWorkspace(props: Props) {
       <div className="accountant-stats">
         <article><span>Loaded sales revenue</span><strong>{money(totals.revenue)}</strong><small>{completedSales.length} completed sales</small></article>
         <article><span>Cost of goods sold</span><strong>{money(totals.cogs)}</strong><small>From loaded sale line items</small></article>
-        <article><span>Loaded expenses</span><strong>{money(totals.expenseTotal)}</strong><small>{expenses.length} expense records</small></article>
+        <article><span>Loaded expenses</span><strong>{money(totals.expenseTotal)}</strong><small>{locationExpenses.length} expense records</small></article>
         <article><span>Operating remainder</span><strong>{money(totals.remainder)}</strong><small>Revenue less COGS and loaded expenses</small></article>
       </div>
 
@@ -116,9 +120,9 @@ export default function AccountantWorkspace(props: Props) {
       </section>
 
       <section className="panel accountant-records-panel">
-        <div className="accountant-records-heading"><div><span className="eyebrow">BUSINESS LEDGER</span><h2>Recent expenses</h2></div><span>{expenses.length} loaded</span></div>
-        {expenses.length
-          ? <div className="accountant-record-list">{expenses.map(item => <article key={item.id}>
+        <div className="accountant-records-heading"><div><span className="eyebrow">BUSINESS LEDGER</span><h2>Recent expenses</h2></div><span>{locationExpenses.length} loaded</span></div>
+        {locationExpenses.length
+          ? <div className="accountant-record-list">{locationExpenses.map(item => <article key={item.id}>
               <div><strong>{item.category}</strong><small>{item.description} · {item.locationId ? locations.find(loc => loc.id === item.locationId)?.name ?? 'Assigned location' : 'Business-wide'}</small><small>{dateTime(item.occurredAt)} · {item.paymentMethod}</small></div>
               <div className="accountant-record-amount"><strong>{money(item.amountMinor)}</strong><span className={item.syncState === 'synced' ? 'staff-sync-pill is-synced' : 'staff-sync-pill'}>{item.syncState === 'synced' ? 'Synced' : item.syncState === 'rejected' ? 'Rejected' : 'Pending sync'}</span></div>
             </article>)}</div>

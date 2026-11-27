@@ -12,6 +12,7 @@ type Props = {
   locations: Location[];
   products: Product[];
   onRefresh: () => Promise<void>;
+  mode?: 'owner'|'inventory_staff';
 };
 
 type OrderLineDraft = { productId: string; quantity: string; unitCost: string };
@@ -21,7 +22,7 @@ const emptyTransferLine=():TransferLineDraft=>({productId:'',quantity:'1'});
 const money=(minor:number)=>new Intl.NumberFormat('en-NG',{style:'currency',currency:'NGN',maximumFractionDigits:2}).format(Number(minor)/100);
 const dateLabel=(value:string)=>new Intl.DateTimeFormat('en-NG',{dateStyle:'medium'}).format(new Date(value));
 
-export default function ProcurementWorkspace({organizationId,locations,products,onRefresh}:Props) {
+export default function ProcurementWorkspace({organizationId,locations,products,onRefresh,mode='owner'}:Props) {
   const [snapshot,setSnapshot]=useState<ProcurementSnapshot|null>(null);
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState(false);
@@ -43,7 +44,7 @@ export default function ProcurementWorkspace({organizationId,locations,products,
   const [transferLines,setTransferLines]=useState<TransferLineDraft[]>([emptyTransferLine()]);
   const [receiveDrafts,setReceiveDrafts]=useState<Record<string,Record<string,string>>>({});
   const [pendingReceiptIds,setPendingReceiptIds]=useState<string[]>([]);
-  const [section,setSection]=useState<'suppliers'|'purchases'|'transfers'>('suppliers');
+  const [section,setSection]=useState<'suppliers'|'purchases'|'transfers'>(mode==='inventory_staff'?'purchases':'suppliers');
 
   async function load() {
     setLoading(true);setError('');
@@ -297,12 +298,12 @@ export default function ProcurementWorkspace({organizationId,locations,products,
     {notice&&<div className="procurement-feedback success" role="status">{notice}<button type="button" onClick={()=>setNotice('')} aria-label="Dismiss notice">×</button></div>}
     {error&&<div className="procurement-feedback error" role="alert">{error}<button type="button" onClick={()=>setError('')} aria-label="Dismiss error">×</button></div>}
     <div className="procurement-tabs" role="tablist" aria-label="Procurement sections">
-      <button type="button" role="tab" aria-selected={section==='suppliers'} className={section==='suppliers'?'active':''} onClick={()=>setSection('suppliers')}>Suppliers <span>{snapshot?.suppliers.length??0}</span></button>
+      {mode==='owner'&&<button type="button" role="tab" aria-selected={section==='suppliers'} className={section==='suppliers'?'active':''} onClick={()=>setSection('suppliers')}>Suppliers <span>{snapshot?.suppliers.length??0}</span></button>}
       <button type="button" role="tab" aria-selected={section==='purchases'} className={section==='purchases'?'active':''} onClick={()=>setSection('purchases')}>Purchase orders <span>{snapshot?.purchaseOrders.length??0}</span></button>
       <button type="button" role="tab" aria-selected={section==='transfers'} className={section==='transfers'?'active':''} onClick={()=>setSection('transfers')}>Transfers <span>{snapshot?.transfers.length??0}</span></button>
     </div>
 
-    {section==='suppliers'&&<div className="procurement-content">
+    {section==='suppliers'&&mode==='owner'&&<div className="procurement-content">
       {snapshot?.canManage&&<form className="procurement-form supplier-form" onSubmit={createSupplier}>
         <div className="procurement-form-heading"><div><strong>{editingSupplierId?'Edit supplier':'Add supplier'}</strong><small>Supplier records are shared by all locations in this business.</small></div></div>
         <label>Supplier name<input required maxLength={140} value={supplierName} onChange={e=>setSupplierName(e.target.value)} placeholder="Supplier or company name"/></label>
@@ -353,7 +354,7 @@ export default function ProcurementWorkspace({organizationId,locations,products,
                 {pending&&remaining>0&&<label>Receive now<input type="number" min="0" max={remaining} step="1" inputMode="numeric" value={receiveDrafts[order.id]?.[item.id]??String(remaining)} onChange={e=>setReceiveDrafts(previous=>({...previous,[order.id]:{...(previous[order.id]??{}),[item.id]:e.target.value}}))}/></label>}
               </div>;
             })}
-            {pending&&snapshot?.canManage&&<div className="procurement-order-footer"><span>Remaining lines can be received in multiple deliveries.</span><button type="button" className="primary" disabled={busy} onClick={()=>void receivePurchaseOrder(order)}>Record delivery</button></div>}
+            {pending&&snapshot?.canReceive&&<div className="procurement-order-footer"><span>Remaining lines can be received in multiple deliveries.</span><button type="button" className="primary" disabled={busy} onClick={()=>void receivePurchaseOrder(order)}>Record delivery</button></div>}
           {(order.status==='ordered'||order.status==='partially_received')&&!pendingReceiptIds.includes(order.id)&&snapshot?.canManage&&<div className="procurement-order-footer"><span>Cancel the remaining quantity while preserving all goods already received.</span><button type="button" className="secondary" disabled={busy} onClick={()=>void cancelPurchaseOrder(order)}>Cancel remaining</button></div>}
           </article>;
         })}
@@ -392,9 +393,9 @@ export default function ProcurementWorkspace({organizationId,locations,products,
         {(snapshot?.transfers??[]).map(transfer=><article className="procurement-order-card" key={transfer.id}>
           <div className="procurement-order-header"><div><strong>{transfer.reference}</strong><small>{transfer.fromLocationName} → {transfer.toLocationName} · {dateLabel(transfer.createdAt)}</small></div><span className={'procurement-status '+transfer.status}>{transfer.status}</span></div>
           {transferItems(transfer).map(item=><div className="procurement-order-line" key={item.id}><div><strong>{item.productName}</strong><small>{item.sku} · {item.quantity.toLocaleString('en-NG')} units · {money(item.unitCostMinor)} unit cost</small></div></div>)}
-          {transfer.status==='draft'&&<div className="procurement-order-footer"><span>Dispatch deducts stock from the source and records in-transit value.</span><button type="button" className="primary" disabled={busy} onClick={()=>void advanceTransfer(transfer,'dispatch_transfer')}>Dispatch</button></div>}
+          {transfer.status==='draft'&&snapshot?.canReceive&&<div className="procurement-order-footer"><span>Dispatch deducts stock from the source and records in-transit value.</span><button type="button" className="primary" disabled={busy} onClick={()=>void advanceTransfer(transfer,'dispatch_transfer')}>Dispatch</button></div>}
           {transfer.status==='draft'&&snapshot?.canManage&&<div className="procurement-order-footer"><span>A draft transfer has not changed stock and can be cancelled.</span><button type="button" className="secondary" disabled={busy} onClick={()=>void cancelTransfer(transfer)}>Cancel draft</button></div>}
-          {transfer.status==='dispatched'&&<div className="procurement-order-footer"><span>Stock is in transit. Confirm the received quantity at destination before closing the transfer.</span><button type="button" className="primary" disabled={busy} onClick={()=>void advanceTransfer(transfer,'receive_transfer')}>Confirm receipt</button></div>}
+          {transfer.status==='dispatched'&&snapshot?.canReceive&&<div className="procurement-order-footer"><span>Stock is in transit. Confirm the received quantity at destination before closing the transfer.</span><button type="button" className="primary" disabled={busy} onClick={()=>void advanceTransfer(transfer,'receive_transfer')}>Confirm receipt</button></div>}
           {transfer.status==='received'&&<div className="procurement-order-footer"><span>Received at destination{transfer.receivedAt?' · '+dateLabel(transfer.receivedAt):''}</span></div>}
         </article>)}
         {!snapshot?.transfers.length&&<div className="procurement-empty">No stock transfers have been created yet.</div>}

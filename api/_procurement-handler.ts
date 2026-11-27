@@ -290,7 +290,7 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
       if(duplicate.rowCount) {
         if(String(duplicate.rows[0].purchase_order_id)!==orderId)throw new Error('receipt_id_collision');
         const priorLines=await pool.query('select purchase_order_item_id,quantity_received from purchase_receipt_items where purchase_receipt_id=$1',[receiptId]);
-        const priorMap=new Map<string,number>(priorLines.rows.map((row:any)=>[String(row.purchase_order_item_id),Number(row.quantity_received)]));
+        const priorMap=new Map<string,number>(priorLines.rows.map((row:any)=>[String(row.purchase_order_item_id),Number(row.quantity_received)] as [string,number]));
         if(priorMap.size!==requested.size||[...requested.entries()].some(([itemId,quantity])=>priorMap.get(itemId)!==quantity))throw new Error('receipt_idempotency_payload_mismatch');
         await pool.query('COMMIT');
         return json(res,200,{receipt:{id:receiptId,deduplicated:true}});

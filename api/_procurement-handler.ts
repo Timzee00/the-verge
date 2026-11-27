@@ -281,6 +281,12 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
       const locationId=String(order.location_id);
       if(!hasLocationAccess(locationId))throw new Error('location_access_denied');
       if(!['ordered','partially_received'].includes(String(order.status)))throw new Error('purchase_order_not_receivable');
+      const requested=new Map<string,number>();
+      for(const raw of rawItems) {
+        const itemId=String(raw?.purchaseOrderItemId??'');
+        if(!UUID.test(itemId)||requested.has(itemId))throw new Error('invalid_receipt_item');
+        requested.set(itemId,positiveInteger(raw.quantityReceived,'received_quantity'));
+      }
       const duplicate=await pool.query('select id,purchase_order_id from purchase_receipts where id=$1 limit 1',[receiptId]);
       if(duplicate.rowCount) {
         if(String(duplicate.rows[0].purchase_order_id)!==orderId)throw new Error('receipt_id_collision');
@@ -289,12 +295,6 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
         if(priorMap.size!==requested.size||[...requested.entries()].some(([itemId,quantity])=>priorMap.get(itemId)!==quantity))throw new Error('receipt_idempotency_payload_mismatch');
         await pool.query('COMMIT');
         return json(res,200,{receipt:{id:receiptId,deduplicated:true}});
-      }
-      const requested=new Map<string,number>();
-      for(const raw of rawItems) {
-        const itemId=String(raw?.purchaseOrderItemId??'');
-        if(!UUID.test(itemId)||requested.has(itemId))throw new Error('invalid_receipt_item');
-        requested.set(itemId,positiveInteger(raw.quantityReceived,'received_quantity'));
       }
       const orderItemIds=[...requested.keys()];
       const items=await pool.query(

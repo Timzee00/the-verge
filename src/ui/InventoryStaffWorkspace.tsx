@@ -192,7 +192,7 @@ export default function InventoryStaffWorkspace(props: Props) {
         </div>
       </section>
 
-      <InventoryTools
+      {locationId !== 'no-location' && <InventoryTools
         products={products}
         organizationId={organizationId}
         locationId={locationId}
@@ -200,7 +200,8 @@ export default function InventoryStaffWorkspace(props: Props) {
         onBarcode={setQuery}
         onImported={onRefresh}
         notify={setNotice}
-      />
+      />}
+      {locationId === 'no-location' && <section className="panel inventory-staff-receive"><strong>No location is assigned</strong><p>Ask the business owner to assign at least one active location before importing or receiving stock.</p></section>}
       <footer className="staff-footer"><span>THE VERGE · Powered by Timzee Corp</span><span>{location?.name ?? 'No location'} · {online ? 'Connected' : 'Offline'} · Staff {userId.slice(0, 6).toUpperCase()}</span></footer>
     </main>
   </div>;

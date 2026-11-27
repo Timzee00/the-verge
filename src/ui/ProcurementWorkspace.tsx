@@ -50,6 +50,28 @@ export default function ProcurementWorkspace({organizationId,locations,products,
     try {
       const data=await api.procurement(organizationId);
       setSnapshot(data);
+      const pendingOrder=await localDB.meta.get(`purchaseOrderKey:${organizationId}`);
+      if(pendingOrder) {
+        try {
+          const stored=JSON.parse(pendingOrder.value) as {request?:{supplierId:string;locationId:string;expectedAt:string|null;notes:string;items:Array<{productId:string;quantityOrdered:number;unitCostMinor:number}>}};
+          if(stored.request) {
+            setOrderSupplierId(stored.request.supplierId);setOrderLocationId(stored.request.locationId);
+            setExpectedAt(stored.request.expectedAt??'');setOrderNotes(stored.request.notes);
+            setOrderLines(stored.request.items.map(item=>({productId:item.productId,quantity:String(item.quantityOrdered),unitCost:(item.unitCostMinor/100).toFixed(2)})));
+          }
+        } catch { /* Keep the existing editable draft if local recovery data is malformed. */ }
+      }
+      const pendingTransfer=await localDB.meta.get(`stockTransferKey:${organizationId}`);
+      if(pendingTransfer) {
+        try {
+          const stored=JSON.parse(pendingTransfer.value) as {request?:{fromLocationId:string;toLocationId:string;notes:string;items:Array<{productId:string;quantity:number}>}};
+          if(stored.request) {
+            setTransferFromId(stored.request.fromLocationId);setTransferToId(stored.request.toLocationId);
+            setTransferNotes(stored.request.notes);
+            setTransferLines(stored.request.items.map(item=>({productId:item.productId,quantity:String(item.quantity)})));
+          }
+        } catch { /* Keep the existing editable draft if local recovery data is malformed. */ }
+      }
       setOrderSupplierId(current=>current||data.suppliers.find(item=>item.active)?.id||'');
       setOrderLocationId(current=>current||locations.find(item=>item.active)?.id||'');
       setTransferFromId(current=>current||locations.find(item=>item.active)?.id||'');

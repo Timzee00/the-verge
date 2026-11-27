@@ -25,6 +25,20 @@ function canWrite(role: string, entity: string) {
 
 function errorText(error: unknown) { return String((error as any)?.message ?? error); }
 
+function assertInventoryMovement(type: unknown, quantityDelta: unknown) {
+  const quantity = Number(quantityDelta);
+  if (!Number.isFinite(quantity) || quantity === 0) throw new Error('invalid_inventory_quantity');
+  if (type === 'sale') throw new Error('sale_requires_pos_transaction');
+  if (type === 'sale_void' || type === 'return') throw new Error('return_or_void_requires_approval_workflow');
+  const positiveTypes = new Set(['opening', 'purchase', 'transfer_in', 'reservation', 'reservation_release']);
+  const negativeTypes = new Set(['damage', 'transfer_out']);
+  if (positiveTypes.has(String(type)) && quantity < 0) throw new Error('invalid_inventory_direction');
+  if (negativeTypes.has(String(type)) && quantity > 0) throw new Error('invalid_inventory_direction');
+  if (type !== 'adjustment' && !positiveTypes.has(String(type)) && !negativeTypes.has(String(type))) {
+    throw new Error('invalid_inventory_event_type');
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!method(req, res, ['POST'])) return;
   const user = await requireUser(req, res);
@@ -70,21 +84,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!p || typeof p !== 'object') throw new Error('invalid_payload');
 
       if (op.entity === 'inventory_event') {
-        const owned = await pool.query('select p.id from products p join locations l on l.id=$2 and l.organization_id=$3 where p.id=$1 and p.organization_id=$3 limit 1', [p.productId, p.locationId, organizationId]);
+        if (p.id !== op.entityId || p.organizationId !== organizationId || p.deviceId !== op.deviceId || p.localSequence !== op.localSequence) {
+          throw new Error('invalid_inventory_event_identity');
+        }
+        const owned = await pool.query('select p.id from products p join locations l on l.id=$2 and l.organization_id=$3 and l.active=true where p.id=$1 and p.organization_id=$3 limit 1', [p.productId, p.locationId, organizationId]);
         if (!owned.rowCount) throw new Error('ownership_check_failed');
         if (!canAccessLocation(p.locationId)) throw new Error('location_access_denied');
 
-        if (p.type === 'sale') throw new Error('sale_requires_pos_transaction');
-        if (!Number.isFinite(Number(p.quantityDelta)) || Number(p.quantityDelta) === 0) throw new Error('invalid_inventory_quantity');
-        if (p.type === 'sale_void' || p.type === 'return') throw new Error('return_or_void_requires_approval_workflow');
+        assertInventoryMovement(p.type, p.quantityDelta);
+        const quantityDelta = Number(p.quantityDelta);
+        if (quantityDelta < 0) {
+          await pool.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [
+            `inventory:${organizationId}:${p.locationId}:${p.productId}`,
+          ]);
+          const stockResult = await pool.query(
+            `select coalesce(sum(case when event_type not in ('reservation','reservation_release') then quantity_delta else 0 end),0) as stock
+             from inventory_events where organization_id=$1 and location_id=$2 and product_id=$3`,
+            [organizationId, p.locationId, p.productId],
+          );
+          const stock = Number(stockResult.rows[0]?.stock ?? 0);
+          if (!Number.isFinite(stock) || stock + quantityDelta < 0) throw new Error('insufficient_stock');
+        }
         await pool.query(`insert into inventory_events (id,organization_id,location_id,product_id,event_type,quantity_delta,unit_cost_minor,reference_id,occurred_at,device_id,local_sequence,created_at,created_by)
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-          on conflict (id) do nothing`, [p.id, organizationId, p.locationId, p.productId, p.type, p.quantityDelta, p.unitCostMinor ?? null, p.referenceId ?? null, p.occurredAt, op.deviceId, op.localSequence, p.createdAt ?? new Date().toISOString(), user.id]);
+          on conflict (id) do nothing`, [p.id, organizationId, p.locationId, p.productId, p.type, quantityDelta, p.unitCostMinor ?? null, p.referenceId ?? null, p.occurredAt, op.deviceId, op.localSequence, p.createdAt ?? new Date().toISOString(), user.id]);
       } else if (op.entity === 'product') {
+        if (p.id !== op.entityId || p.organizationId !== organizationId) throw new Error('invalid_product_identity');
         await pool.query(`insert into products (id,organization_id,sku,barcode,name,brand,category,unit,weight_value,weight_unit,image_url,standard_cost_minor,retail_price_minor,wholesale_price_minor,minimum_price_minor,reorder_level,active,track_batch,track_expiry,created_at,updated_at)
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
           on conflict (id) do nothing`, [p.id,organizationId,p.sku,p.barcode??null,p.name,p.brand??null,p.category??null,p.unit,p.weightValue??null,p.weightUnit??null,p.imageUri??null,p.standardCostMinor,p.retailPriceMinor,p.wholesalePriceMinor??null,p.minimumPriceMinor??null,p.reorderLevel??null,p.active,p.trackBatch,p.trackExpiry,p.createdAt,p.updatedAt]);
       } else if (op.entity === 'customer') {
+        if (p.id !== op.entityId || p.organizationId !== organizationId) throw new Error('invalid_customer_identity');
         await pool.query(`insert into customers (id,organization_id,name,phone,email,credit_limit_minor,active,created_at,updated_at)
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict (id) do nothing`, [p.id,organizationId,p.name,p.phone??null,p.email??null,p.creditLimitMinor??null,p.active,p.createdAt,p.updatedAt]);
       } else if (op.entity === 'sale') {
@@ -92,7 +122,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const items = Array.isArray(p.items) ? p.items : (p.item ? [p.item] : []);
         const embeddedEvents = Array.isArray(p.inventoryEvents) ? p.inventoryEvents : (p.inventoryEvent ? [p.inventoryEvent] : []);
         if (!sale || !items.length || items.length > 100 || embeddedEvents.length !== items.length) throw new Error('invalid_sale_payload');
-        if (sale.organizationId !== organizationId || typeof sale.id !== 'string' || sale.status !== 'completed' || sale.deviceId !== op.deviceId || sale.localSequence !== op.localSequence) throw new Error('invalid_sale_header');
+        if (sale.organizationId !== organizationId || sale.id !== op.entityId || sale.status !== 'completed' || sale.deviceId !== op.deviceId || sale.localSequence !== op.localSequence) throw new Error('invalid_sale_header');
         if (!['cash', 'bank', 'transfer', 'card', 'credit'].includes(String(sale.paymentMethod))) throw new Error('invalid_payment_method');
         if (sale.paymentMethod === 'credit' && !['business_owner', 'platform_admin', 'manager'].includes(role)) throw new Error('credit_sale_requires_manager');
         if (![sale.subtotalMinor, sale.discountMinor, sale.totalMinor].every(value => Number.isSafeInteger(Number(value)) && Number(value) >= 0)) throw new Error('invalid_sale_amount');
@@ -186,6 +216,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       } else {
         const expense = p;
+        if (expense.id !== op.entityId || expense.organizationId !== organizationId || expense.deviceId !== op.deviceId) throw new Error('invalid_expense_identity');
         if (!expense.id || !expense.category || !expense.description || !Number.isFinite(Number(expense.amountMinor)) || Number(expense.amountMinor) <= 0) throw new Error('invalid_expense_payload');
         if (!organizationWide && !expense.locationId) throw new Error('expense_location_required');
         if (expense.locationId) {

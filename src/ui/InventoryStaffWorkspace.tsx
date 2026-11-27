@@ -87,22 +87,22 @@ export default function InventoryStaffWorkspace(props: Props) {
     setSaving(true); setError(''); setNotice('');
     try {
       const createdAt = new Date().toISOString();
-      const current = Number((await localDB.meta.get('localSequence'))?.value ?? Date.now());
-      const localSequence = Math.max(current, Date.now()) + 1;
-      const event: InventoryEvent = {
-        id: uid(), organizationId, locationId, productId: product.id,
-        type: 'purchase', quantityDelta: count, unitCostMinor: product.standardCostMinor,
-        occurredAt: createdAt, deviceId, localSequence, syncState: 'pending', createdAt,
-      };
-      validateInventoryEvent(event);
-      const operation = {
-        id: uid(), organizationId, deviceId, entity: 'inventory_event' as const,
-        entityId: event.id, operation: 'create' as const, payload: event,
-        createdAt, attempts: 0, state: 'pending' as const, localSequence,
-      };
       await localDB.transaction('rw', [
         localDB.inventoryEvents, localDB.syncOperations, localDB.meta,
       ], async () => {
+        const current = Number((await localDB.meta.get('localSequence'))?.value ?? Date.now());
+        const localSequence = Math.max(current, Date.now()) + 1;
+        const event: InventoryEvent = {
+          id: uid(), organizationId, locationId, productId: product.id,
+          type: 'purchase', quantityDelta: count, unitCostMinor: product.standardCostMinor,
+          occurredAt: createdAt, deviceId, localSequence, syncState: 'pending', createdAt,
+        };
+        validateInventoryEvent(event);
+        const operation = {
+          id: uid(), organizationId, deviceId, entity: 'inventory_event' as const,
+          entityId: event.id, operation: 'create' as const, payload: event,
+          createdAt, attempts: 0, state: 'pending' as const, localSequence,
+        };
         await localDB.inventoryEvents.add(event);
         await localDB.syncOperations.add(operation);
         await localDB.meta.put({ key: 'localSequence', value: String(localSequence) });

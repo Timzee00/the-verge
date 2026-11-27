@@ -55,6 +55,28 @@ export function buildExpenseJournalLines(input: ExpensePostingInput): Array<Omit
   return lines;
 }
 
+export interface SupplierPaymentPostingInput {
+  payableAccountId: string;
+  paymentAccountId: string;
+  amountMinor: number;
+}
+
+/** Supplier settlement reduces accounts payable and the selected cash/bank asset. */
+export function buildSupplierPaymentJournalLines(input: SupplierPaymentPostingInput): Array<Omit<JournalLine, 'id' | 'journalEntryId'>> {
+  if (!input.payableAccountId || !input.paymentAccountId || input.payableAccountId === input.paymentAccountId) {
+    throw new Error('Supplier payment requires payable and payment accounts');
+  }
+  if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) {
+    throw new Error('Supplier payment amount must be a positive safe integer');
+  }
+  const lines = [
+    { accountId: input.payableAccountId, debitMinor: input.amountMinor, creditMinor: 0 },
+    { accountId: input.paymentAccountId, debitMinor: 0, creditMinor: input.amountMinor },
+  ];
+  assertBalanced(lines);
+  return lines;
+}
+
 export interface PurchasePostingInput {
   inventoryAccountId: string;
   payableAccountId: string;

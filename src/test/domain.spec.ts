@@ -2,7 +2,7 @@ function assert(condition: unknown, message = 'assertion failed') { if (!conditi
 function equal(a: unknown, b: unknown, message?: string) { assert(a === b, message ?? `${String(a)} !== ${String(b)}`); }
 function deepEqual(a: unknown, b: unknown, message='deep equality failed') { equal(JSON.stringify(a), JSON.stringify(b), message); }
 function throws(fn: () => unknown) { let thrown = false; try { fn(); } catch { thrown = true; } assert(thrown, 'expected function to throw'); }
-import { assertBalanced, buildExpenseJournalLines, buildOpeningInventoryJournalLines, buildPurchaseJournalLines, buildSaleJournalLines, buildTransferJournalLines } from '../domain/accounting.js';
+import { assertBalanced, buildExpenseJournalLines, buildOpeningInventoryJournalLines, buildPurchaseJournalLines, buildSaleJournalLines, buildSupplierPaymentJournalLines, buildTransferJournalLines } from '../domain/accounting.js';
 import { parseMajorToMinor, formatMinor } from '../domain/money.js';
 import { calculateAvailable, validateInventoryMovement, validateSaleAgainstSnapshot } from '../domain/inventory.js';
 import { deduplicateOperations, nextRetryAt } from '../domain/sync.js';
@@ -33,6 +33,13 @@ assertBalanced(openingJournal);
 equal(openingJournal[0].debitMinor,120000);
 equal(openingJournal[1].creditMinor,120000);
 throws(() => buildOpeningInventoryJournalLines({inventoryAccountId:'inventory',equityAccountId:'equity',amountMinor:0}));
+
+const supplierPaymentJournal = buildSupplierPaymentJournalLines({payableAccountId:'payables',paymentAccountId:'bank',amountMinor:40000});
+assertBalanced(supplierPaymentJournal);
+equal(supplierPaymentJournal[0].debitMinor,40000);
+equal(supplierPaymentJournal[1].creditMinor,40000);
+throws(() => buildSupplierPaymentJournalLines({payableAccountId:'payables',paymentAccountId:'bank',amountMinor:0}));
+throws(() => buildSupplierPaymentJournalLines({payableAccountId:'bank',paymentAccountId:'bank',amountMinor:10}));
 
 const purchaseJournal = buildPurchaseJournalLines({inventoryAccountId:'inventory',payableAccountId:'payables',totalCostMinor:250000});
 assertBalanced(purchaseJournal);

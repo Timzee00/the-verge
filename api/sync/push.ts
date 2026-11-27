@@ -5,6 +5,7 @@ import { validateInventoryMovement } from '../../src/domain/inventory.js';
 import { postExpenseJournal, postSaleJournal } from '../_accounting.js';
 
 const ALLOWED = new Set(['inventory_event', 'product', 'customer', 'sale', 'expense']);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ENTITY_PERMISSION: Record<string, string> = {
   inventory_event: 'inventory.write',
   product: 'inventory.write',
@@ -33,7 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!user) return;
 
   const { organizationId, operations } = req.body ?? {};
-  if (typeof organizationId !== 'string' || !Array.isArray(operations) || operations.length > 100) {
+  if (typeof organizationId !== 'string' || !UUID.test(organizationId) || !Array.isArray(operations) || operations.length > 100) {
     return json(res, 400, { error: 'invalid_batch' });
   }
 
@@ -48,7 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const results: any[] = [];
   for (const op of operations) {
-    if (!op || typeof op !== 'object' || !ALLOWED.has(op.entity) || op.operation !== 'create' || typeof op.entityId !== 'string' || typeof op.deviceId !== 'string' || !Number.isInteger(op.localSequence) || op.localSequence < 0) {
+    if (!op || typeof op !== 'object' || !ALLOWED.has(op.entity) || op.operation !== 'create' || !UUID.test(String(op.id ?? '')) || !UUID.test(String(op.entityId ?? '')) || op.organizationId !== organizationId || typeof op.deviceId !== 'string' || !op.deviceId.trim() || op.deviceId.length > 128 || !Number.isSafeInteger(op.localSequence) || op.localSequence <= 0) {
       results.push({ id: (op as any)?.id ?? null, ok: false, rejected: true, error: 'invalid_operation' });
       continue;
     }
@@ -61,8 +62,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const pool = transactionPool();
     try {
       await pool.query('BEGIN');
-      const existing = await pool.query('select 1 from sync_receipts where device_id=$1 and local_sequence=$2 limit 1', [op.deviceId, op.localSequence]);
+      const existing = await pool.query('select organization_id,entity_type,entity_id from sync_receipts where device_id=$1 and local_sequence=$2 limit 1 for share', [op.deviceId, op.localSequence]);
       if (existing.rowCount) {
+        const receipt=existing.rows[0];
+        if(String(receipt.organization_id)!==organizationId || String(receipt.entity_type)!==String(op.entity) || String(receipt.entity_id)!==String(op.entityId)) {
+          throw new Error('sync_sequence_replay_mismatch');
+        }
         await pool.query('COMMIT');
         results.push({ id: op.id, ok: true, deduplicated: true });
         continue;
@@ -92,18 +97,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const stock = Number(stockResult.rows[0]?.stock ?? 0);
           if (!Number.isFinite(stock) || stock + quantityDelta < 0) throw new Error('insufficient_stock');
         }
-        await pool.query(`insert into inventory_events (id,organization_id,location_id,product_id,event_type,quantity_delta,unit_cost_minor,reference_id,occurred_at,device_id,local_sequence,created_at,created_by)
+        const insertedEvent=await pool.query(`insert into inventory_events (id,organization_id,location_id,product_id,event_type,quantity_delta,unit_cost_minor,reference_id,occurred_at,device_id,local_sequence,created_at,created_by)
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-          on conflict (id) do nothing`, [p.id, organizationId, p.locationId, p.productId, p.type, quantityDelta, p.unitCostMinor ?? null, p.referenceId ?? null, p.occurredAt, op.deviceId, op.localSequence, p.createdAt ?? new Date().toISOString(), user.id]);
+          on conflict (id) do nothing returning id`, [p.id, organizationId, p.locationId, p.productId, p.type, quantityDelta, p.unitCostMinor ?? null, p.referenceId ?? null, p.occurredAt, op.deviceId, op.localSequence, p.createdAt ?? new Date().toISOString(), user.id]);
+        if(!insertedEvent.rowCount) {
+          const prior=await pool.query('select organization_id,location_id,product_id,event_type,quantity_delta,device_id,local_sequence,reference_id from inventory_events where id=$1 limit 1 for share',[p.id]);
+          const row=prior.rows[0];
+          if(!row || String(row.organization_id)!==organizationId || String(row.location_id)!==p.locationId || String(row.product_id)!==p.productId || row.event_type!==p.type || Number(row.quantity_delta)!==quantityDelta || String(row.device_id)!==op.deviceId || Number(row.local_sequence)!==op.localSequence || String(row.reference_id??'')!==String(p.referenceId??'')) throw new Error('inventory_event_id_collision');
+        }
       } else if (op.entity === 'product') {
         if (p.id !== op.entityId || p.organizationId !== organizationId) throw new Error('invalid_product_identity');
-        await pool.query(`insert into products (id,organization_id,sku,barcode,name,brand,category,unit,weight_value,weight_unit,image_url,standard_cost_minor,retail_price_minor,wholesale_price_minor,minimum_price_minor,reorder_level,active,track_batch,track_expiry,created_at,updated_at)
+        const insertedProduct=await pool.query(`insert into products (id,organization_id,sku,barcode,name,brand,category,unit,weight_value,weight_unit,image_url,standard_cost_minor,retail_price_minor,wholesale_price_minor,minimum_price_minor,reorder_level,active,track_batch,track_expiry,created_at,updated_at)
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
-          on conflict (id) do nothing`, [p.id,organizationId,p.sku,p.barcode??null,p.name,p.brand??null,p.category??null,p.unit,p.weightValue??null,p.weightUnit??null,p.imageUri??null,p.standardCostMinor,p.retailPriceMinor,p.wholesalePriceMinor??null,p.minimumPriceMinor??null,p.reorderLevel??null,p.active,p.trackBatch,p.trackExpiry,p.createdAt,p.updatedAt]);
+          on conflict (id) do nothing returning id`, [p.id,organizationId,p.sku,p.barcode??null,p.name,p.brand??null,p.category??null,p.unit,p.weightValue??null,p.weightUnit??null,p.imageUri??null,p.standardCostMinor,p.retailPriceMinor,p.wholesalePriceMinor??null,p.minimumPriceMinor??null,p.reorderLevel??null,p.active,p.trackBatch,p.trackExpiry,p.createdAt,p.updatedAt]);
+        if(!insertedProduct.rowCount) {
+          const prior=await pool.query('select organization_id,sku,barcode,name,standard_cost_minor,retail_price_minor from products where id=$1 limit 1 for share',[p.id]);
+          const row=prior.rows[0];
+          if(!row || String(row.organization_id)!==organizationId || row.sku!==p.sku || String(row.barcode??'')!==String(p.barcode??'') || row.name!==p.name || Number(row.standard_cost_minor)!==Number(p.standardCostMinor) || Number(row.retail_price_minor)!==Number(p.retailPriceMinor)) throw new Error('product_id_collision');
+        }
       } else if (op.entity === 'customer') {
         if (p.id !== op.entityId || p.organizationId !== organizationId) throw new Error('invalid_customer_identity');
-        await pool.query(`insert into customers (id,organization_id,name,phone,email,credit_limit_minor,active,created_at,updated_at)
-          values ($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict (id) do nothing`, [p.id,organizationId,p.name,p.phone??null,p.email??null,p.creditLimitMinor??null,p.active,p.createdAt,p.updatedAt]);
+        const insertedCustomer=await pool.query(`insert into customers (id,organization_id,name,phone,email,credit_limit_minor,active,created_at,updated_at)
+          values ($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict (id) do nothing returning id`, [p.id,organizationId,p.name,p.phone??null,p.email??null,p.creditLimitMinor??null,p.active,p.createdAt,p.updatedAt]);
+        if(!insertedCustomer.rowCount) {
+          const prior=await pool.query('select organization_id,name,phone,email,credit_limit_minor,active from customers where id=$1 limit 1 for share',[p.id]);
+          const row=prior.rows[0];
+          if(!row || String(row.organization_id)!==organizationId || row.name!==p.name || String(row.phone??'')!==String(p.phone??'') || String(row.email??'')!==String(p.email??'') || Number(row.credit_limit_minor??0)!==Number(p.creditLimitMinor??0) || Boolean(row.active)!==Boolean(p.active)) throw new Error('customer_id_collision');
+        }
       } else if (op.entity === 'sale') {
         const sale = p.sale;
         const items = Array.isArray(p.items) ? p.items : (p.item ? [p.item] : []);
@@ -182,24 +202,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (!Number.isSafeInteger(required) || required <= 0 || stock < required) throw new Error('insufficient_stock');
         }
 
-        await pool.query(`insert into sales (id,organization_id,location_id,customer_id,subtotal_minor,discount_minor,total_minor,payment_method,status,below_cost,discount_reason,occurred_at,device_id,local_sequence,created_at,created_by)
-          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,now(),$15) on conflict (id) do nothing`,
+        const insertedSale=await pool.query(`insert into sales (id,organization_id,location_id,customer_id,subtotal_minor,discount_minor,total_minor,payment_method,status,below_cost,discount_reason,occurred_at,device_id,local_sequence,created_at,created_by)
+          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,now(),$15) on conflict (id) do nothing returning id`,
           [sale.id,organizationId,sale.locationId,sale.customerId??null,subtotalMinor,0,subtotalMinor,sale.paymentMethod,'completed',false,null,sale.occurredAt,op.deviceId,op.localSequence,user.id]);
+        if(!insertedSale.rowCount) throw new Error('sale_id_collision');
 
         for (const { item, event, unitPriceMinor, unitCostMinor } of validatedItems) {
-          await pool.query(`insert into sale_items (id,sale_id,product_id,quantity,unit_price_minor,unit_cost_minor,discount_minor)
-            values ($1,$2,$3,$4,$5,$6,0) on conflict (id) do nothing`,
+          const insertedItem=await pool.query(`insert into sale_items (id,sale_id,product_id,quantity,unit_price_minor,unit_cost_minor,discount_minor)
+            values ($1,$2,$3,$4,$5,$6,0) on conflict (id) do nothing returning id`,
             [item.id,sale.id,item.productId,item.quantity,unitPriceMinor,unitCostMinor]);
+          if(!insertedItem.rowCount) throw new Error('sale_item_id_collision');
 
-          const existingEvent = await pool.query('select 1 from inventory_events where id=$1 limit 1', [event.id]);
-          if (!existingEvent.rowCount) {
-            await pool.query(`insert into inventory_events (id,organization_id,location_id,product_id,event_type,quantity_delta,unit_cost_minor,reference_id,occurred_at,device_id,local_sequence,created_at,created_by)
-              values ($1,$2,$3,$4,'sale',$5,$6,$7,$8,$9,$10,$11,$12)`,
-              [event.id,organizationId,event.locationId,event.productId,event.quantityDelta,unitCostMinor,sale.id,event.occurredAt,op.deviceId,event.localSequence,event.createdAt??sale.createdAt,user.id]);
-            await pool.query(`insert into sync_receipts (organization_id,device_id,local_sequence,entity_type,entity_id)
-              values ($1,$2,$3,'inventory_event',$4) on conflict do nothing`,
-              [organizationId,op.deviceId,event.localSequence,event.id]);
-          }
+          const insertedSaleEvent=await pool.query(`insert into inventory_events (id,organization_id,location_id,product_id,event_type,quantity_delta,unit_cost_minor,reference_id,occurred_at,device_id,local_sequence,created_at,created_by)
+            values ($1,$2,$3,$4,'sale',$5,$6,$7,$8,$9,$10,$11,$12) on conflict (id) do nothing returning id`,
+            [event.id,organizationId,event.locationId,event.productId,event.quantityDelta,unitCostMinor,sale.id,event.occurredAt,op.deviceId,event.localSequence,event.createdAt??sale.createdAt,user.id]);
+          if(!insertedSaleEvent.rowCount) throw new Error('sale_inventory_event_id_collision');
+          await pool.query(`insert into sync_receipts (organization_id,device_id,local_sequence,entity_type,entity_id)
+            values ($1,$2,$3,'inventory_event',$4)`,
+            [organizationId,op.deviceId,event.localSequence,event.id]);
         }
 
         await postSaleJournal(pool, {
@@ -222,8 +242,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (!location.rowCount) throw new Error('location_ownership_check_failed');
           if (!canAccessLocation(expense.locationId)) throw new Error('location_access_denied');
         }
-        await pool.query(`insert into expenses (id,organization_id,location_id,amount_minor,category,description,payment_method,occurred_at,device_id,created_at,created_by)
-          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) on conflict (id) do nothing`, [expense.id,organizationId,expense.locationId??null,expense.amountMinor,expense.category,expense.description,expense.paymentMethod,expense.occurredAt,expense.deviceId,expense.createdAt,user.id]);
+        const insertedExpense=await pool.query(`insert into expenses (id,organization_id,location_id,amount_minor,category,description,payment_method,occurred_at,device_id,created_at,created_by)
+          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) on conflict (id) do nothing returning id`, [expense.id,organizationId,expense.locationId,expense.amountMinor,expense.category,expense.description,expense.paymentMethod,expense.occurredAt,expense.deviceId,expense.createdAt,user.id]);
+        if(!insertedExpense.rowCount) throw new Error('expense_id_collision');
         await postExpenseJournal(pool, {
           organizationId,
           locationId: expense.locationId,

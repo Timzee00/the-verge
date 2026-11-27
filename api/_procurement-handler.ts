@@ -127,7 +127,7 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
     return json(res,200,{
       suppliers:suppliers.map(mapSupplier),purchaseOrders:orders.map(mapOrder),
       purchaseOrderItems:orderItems.map(mapOrderItem),purchaseReceipts:receipts.map(mapReceipt),
-      transfers:transfers.map(mapTransfer),transferItems:transferItems.map(mapTransferItem),
+      transfers:transfers.map((row:any)=>({...mapTransfer(row),canDispatch:canAccessLocation(role,assigned,String(row.from_location_id)),canReceive:canAccessLocation(role,assigned,String(row.to_location_id))})),transferItems:transferItems.map(mapTransferItem),
       canManage:MANAGE_ROLES.has(role),
       canReceive:['business_owner','platform_admin','manager','inventory_staff'].includes(role),
     });

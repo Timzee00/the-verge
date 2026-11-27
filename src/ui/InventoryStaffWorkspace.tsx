@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { InventoryEvent, Location, Product } from '../core/types';
+import type { Location, Product } from '../core/types';
 import { localDB } from '../db/local';
 import { getLocalStock } from '../inventory/ledger';
-import { validateInventoryEvent } from '../domain/inventory';
 import InventoryTools from '../inventory/InventoryTools';
 import ProcurementWorkspace from './ProcurementWorkspace';
 import type { SessionOrg } from '../api';
@@ -30,7 +29,6 @@ const money = (minor: number) => new Intl.NumberFormat('en-NG', {
   style: 'currency', currency: 'NGN', maximumFractionDigits: 2,
 }).format(minor / 100);
 
-const uid = () => crypto.randomUUID();
 
 export default function InventoryStaffWorkspace(props: Props) {
   const {
@@ -40,9 +38,6 @@ export default function InventoryStaffWorkspace(props: Props) {
   } = props;
   const [query, setQuery] = useState('');
   const [stock, setStock] = useState<Record<string, number>>({});
-  const [selectedProductId, setSelectedProductId] = useState('');
-  const [quantity, setQuantity] = useState('1');
-  const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
 
@@ -76,48 +71,6 @@ export default function InventoryStaffWorkspace(props: Props) {
     stock[product.id] !== undefined &&
     stock[product.id] <= product.reorderLevel,
   ).length;
-
-  async function receiveStock() {
-    const product = activeProducts.find(item => item.id === selectedProductId);
-    const count = Number(quantity);
-    if (!product) { setError('Choose an active product first.'); return; }
-    if (!locationId || locationId === 'no-location') { setError('This account has no active assigned location. Contact the owner.'); return; }
-    if (!Number.isSafeInteger(count) || count <= 0) { setError('Quantity must be a positive whole number.'); return; }
-    if (saving) return;
-
-    setSaving(true); setError(''); setNotice('');
-    try {
-      const createdAt = new Date().toISOString();
-      await localDB.transaction('rw', [
-        localDB.inventoryEvents, localDB.syncOperations, localDB.meta,
-      ], async () => {
-        const current = Number((await localDB.meta.get('localSequence'))?.value ?? Date.now());
-        const localSequence = Math.max(current, Date.now()) + 1;
-        const event: InventoryEvent = {
-          id: uid(), organizationId, locationId, productId: product.id,
-          type: 'purchase', quantityDelta: count, unitCostMinor: product.standardCostMinor,
-          occurredAt: createdAt, deviceId, localSequence, syncState: 'pending', createdAt,
-        };
-        validateInventoryEvent(event);
-        const operation = {
-          id: uid(), organizationId, deviceId, entity: 'inventory_event' as const,
-          entityId: event.id, operation: 'create' as const, payload: event,
-          createdAt, attempts: 0, state: 'pending' as const, localSequence,
-        };
-        await localDB.inventoryEvents.add(event);
-        await localDB.syncOperations.add(operation);
-        await localDB.meta.put({ key: 'localSequence', value: String(localSequence) });
-      });
-      setQuantity('1');
-      setNotice(`Received ${count} ${product.unit} of ${product.name}. The stock record is saved and queued for sync.`);
-      await onRefresh();
-      setStock(previous => ({ ...previous, [product.id]: (previous[product.id] ?? 0) + count }));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'The stock receipt could not be saved.');
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return <div className="staff-shell">
     <header className="staff-header">

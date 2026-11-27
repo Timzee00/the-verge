@@ -278,6 +278,36 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
     } finally { await pool.end(); }
   }
 
+  if(action==='cancel_purchase_order') {
+    if(!MANAGE_ROLES.has(role))return json(res,403,{error:'purchase_order_permission_required'});
+    const orderId=String(body.purchaseOrderId??'');
+    if(!UUID.test(orderId))return json(res,400,{error:'invalid_purchase_order_id'});
+    const pool=transactionPool();
+    try {
+      await pool.query('BEGIN');
+      const order=await pool.query(
+        'select id,status from purchase_orders where id=$1 and organization_id=$2 for update',
+        [orderId,organizationId],
+      );
+      if(!order.rowCount)throw new Error('purchase_order_not_found');
+      if(order.rows[0].status!=='ordered')throw new Error('purchase_order_not_cancellable');
+      const received=await pool.query('select 1 from purchase_receipts where purchase_order_id=$1 limit 1',[orderId]);
+      if(received.rowCount)throw new Error('purchase_order_has_receipts');
+      await pool.query("update purchase_orders set status='cancelled',updated_at=now() where id=$1",[orderId]);
+      await pool.query(`insert into audit_events (organization_id,actor_user_id,action,entity_type,entity_id,after_data,reason)
+        values ($1,$2,'purchase_order.cancelled','purchase_order',$3,$4::jsonb,'Purchase order cancelled before receipt')`,
+        [organizationId,user.id,orderId,JSON.stringify({status:'cancelled'})]);
+      await pool.query('COMMIT');
+      return json(res,200,{purchaseOrder:{id:orderId,status:'cancelled'}});
+    } catch(error:any) {
+      await pool.query('ROLLBACK').catch(()=>undefined);
+      const message=String(error?.message??error);
+      if(['purchase_order_not_found','purchase_order_not_cancellable','purchase_order_has_receipts'].includes(message))return json(res,409,{error:message});
+      console.error('[procurement.purchase_cancel]',{name:error?.name,code:error?.code});
+      return json(res,500,{error:'purchase_order_cancel_failed'});
+    } finally { await pool.end(); }
+  }
+
   if(action==='receive_purchase_order') {
     if(!['business_owner','platform_admin','manager','inventory_staff'].includes(role))return json(res,403,{error:'receiving_permission_required'});
     const orderId=String(body.purchaseOrderId??''),receiptId=String(body.idempotencyKey??'');
@@ -449,8 +479,34 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
       const message=String(error?.message??error);
       if(message.endsWith('_too_long')||['invalid_transfer','invalid_or_duplicate_transfer_product','invalid_transfer_quantity','product_not_available','transfer_location_not_available'].includes(message))return json(res,400,{error:message});
       if(message==='transfer_idempotency_payload_mismatch')return json(res,409,{error:message});
+      if(message==='transfer_idempotency_payload_mismatch')return json(res,409,{error:message});
       console.error('[procurement.transfer_create]',{name:error?.name,code:error?.code});
       return json(res,500,{error:'transfer_create_failed'});
+    } finally { await pool.end(); }
+  }
+
+  if(action==='cancel_transfer') {
+    if(!MANAGE_ROLES.has(role))return json(res,403,{error:'transfer_manage_permission_required'});
+    const transferId=String(body.transferId??'');
+    if(!UUID.test(transferId))return json(res,400,{error:'invalid_transfer_id'});
+    const pool=transactionPool();
+    try {
+      await pool.query('BEGIN');
+      const transfer=await pool.query('select id,status from stock_transfers where id=$1 and organization_id=$2 for update',[transferId,organizationId]);
+      if(!transfer.rowCount)throw new Error('transfer_not_found');
+      if(transfer.rows[0].status!=='draft')throw new Error('transfer_not_cancellable');
+      await pool.query("update stock_transfers set status='cancelled',updated_at=now() where id=$1",[transferId]);
+      await pool.query(`insert into audit_events (organization_id,actor_user_id,action,entity_type,entity_id,after_data,reason)
+        values ($1,$2,'stock_transfer.cancelled','stock_transfer',$3,$4::jsonb,'Draft transfer cancelled before dispatch')`,
+        [organizationId,user.id,transferId,JSON.stringify({status:'cancelled'})]);
+      await pool.query('COMMIT');
+      return json(res,200,{transfer:{id:transferId,status:'cancelled'}});
+    } catch(error:any) {
+      await pool.query('ROLLBACK').catch(()=>undefined);
+      const message=String(error?.message??error);
+      if(['transfer_not_found','transfer_not_cancellable'].includes(message))return json(res,409,{error:message});
+      console.error('[procurement.transfer_cancel]',{name:error?.name,code:error?.code});
+      return json(res,500,{error:'transfer_cancel_failed'});
     } finally { await pool.end(); }
   }
 
@@ -467,6 +523,8 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
       const transfer=result.rows[0];
       const relevantLocation=stage==='dispatch'?String(transfer.from_location_id):String(transfer.to_location_id);
       if(!hasLocationAccess(relevantLocation))throw new Error('location_access_denied');
+      const activeLocation=await pool.query('select 1 from locations where id=$1 and organization_id=$2 and active=true limit 1',[relevantLocation,organizationId]);
+      if(!activeLocation.rowCount)throw new Error('transfer_location_not_available');
       if(stage==='dispatch'&&transfer.status!=='draft') {
         const prior=await pool.query('select id from stock_transfer_events where transfer_id=$1 and action=\'dispatched\' limit 1',[transferId]);
         if(prior.rowCount) {
@@ -567,7 +625,7 @@ export async function handleProcurement(req:VercelRequest,res:VercelResponse) {
     } catch(error:any) {
       await pool.query('ROLLBACK').catch(()=>undefined);
       const message=String(error?.message??error);
-      const invalid=['transfer_not_found','location_access_denied','transfer_not_dispatchable','transfer_not_receivable','transfer_has_no_items','transfer_product_not_available','invalid_transfer_cost','transfer_value_overflow','insufficient_transfer_stock'];
+      const invalid=['transfer_not_found','location_access_denied','transfer_location_not_available','transfer_not_dispatchable','transfer_not_receivable','transfer_has_no_items','transfer_product_not_available','invalid_transfer_cost','transfer_value_overflow','insufficient_transfer_stock'];
       if(invalid.includes(message))return json(res,400,{error:message});
       if(error?.code==='23505')return json(res,409,{error:'transfer_stage_already_recorded'});
       console.error('[procurement.transfer]',{name:error?.name,code:error?.code});

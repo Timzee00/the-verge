@@ -71,5 +71,15 @@ export async function handleAccounting(req: VercelRequest, res: VercelResponse) 
     order by jl.journal_entry_id, la.code, jl.id
   ` : [];
 
-  return json(res, 200, { ledgerAccounts, journals, journalLines, truncated: journals.length === 200 });
+  const normalizedJournalLines = journalLines.map((line: any) => {
+    const debitMinor = Number(line.debitMinor);
+    const creditMinor = Number(line.creditMinor);
+    if (!Number.isSafeInteger(debitMinor) || debitMinor < 0 ||
+        !Number.isSafeInteger(creditMinor) || creditMinor < 0) {
+      throw new Error('journal_amount_out_of_safe_integer_range');
+    }
+    return { ...line, debitMinor, creditMinor };
+  });
+
+  return json(res, 200, { ledgerAccounts, journals, journalLines: normalizedJournalLines, truncated: journals.length === 200 });
 }

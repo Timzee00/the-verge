@@ -118,6 +118,10 @@ function CashierWorkspace({
   }, [resultProducts, cart, locationId]);
 
   useEffect(() => {
+    setNotice(''); setQuery(''); setSelectedCustomerId(''); setStock({});
+  }, [organizationId, locationId]);
+
+  useEffect(() => {
     let current = true;
     if (!organizationId || !locationId || locationId === 'no-location' || !userId) {
       setParkedCarts([]);
@@ -235,6 +239,7 @@ function CashierWorkspace({
   };
 
   const resumeCart = async (saved: ParkedCart) => {
+    if (cart.length) { setNotice('Park or clear the current cart before restoring another sale.'); return; }
     const restored: CartLine[] = [];
     for (const line of saved.items) {
       const product = productById.get(line.productId);
@@ -307,7 +312,7 @@ function CashierWorkspace({
       </div>
       <div className="staff-context">
         {organizations.length > 1
-          ? <label><span>BUSINESS</span><select value={organizationId} onChange={event => void onOrganizationChange(event.target.value)}>{organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}</select></label>
+          ? <label><span>BUSINESS</span><select value={organizationId} disabled={cart.length > 0} onChange={event => void onOrganizationChange(event.target.value)}>{organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}</select></label>
           : <div className="staff-context-name"><span>BUSINESS</span><strong>{organizationName}</strong></div>}
         {locations.length > 1
           ? <label><span>LOCATION</span><select value={locationId} disabled={cart.length > 0} onChange={event => onLocationChange(event.target.value)}>{locations.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
@@ -341,6 +346,7 @@ function CashierWorkspace({
           <div className="staff-catalogue-meta"><strong>{resultProducts.length}</strong> products shown <span>·</span> scan again to increase quantity</div>
           <div className="staff-product-list">
             {resultProducts.map(product => {
+              const stockKnown = stock[product.id] !== undefined;
               const available = stock[product.id] ?? 0;
               const inCart = cart.find(line => line.productId === product.id)?.quantity ?? 0;
               const draft = draftQuantities[product.id] ?? '1';
@@ -350,13 +356,13 @@ function CashierWorkspace({
                 <div className="staff-product-main">
                   <strong>{product.name}</strong>
                   <small>{product.sku}{product.barcode ? ` · ${product.barcode}` : ''}</small>
-                  <span className={available <= (product.reorderLevel ?? 0) ? 'staff-stock is-low' : 'staff-stock'}>{available} {product.unit} available{inCart ? ` · ${inCart} in cart` : ''}</span>
+                  <span className={stockKnown && available <= (product.reorderLevel ?? 0) ? 'staff-stock is-low' : 'staff-stock'}>{stockKnown ? `${available} ${product.unit} available` : 'Checking stock…'}{inCart ? ` · ${inCart} in cart` : ''}</span>
                 </div>
                 <div className="staff-product-action">
                   <strong>{money(product.retailPriceMinor)}</strong>
                   <div className="staff-add-row">
                     <input aria-label={`Quantity for ${product.name}`} type="number" min="1" step="1" inputMode="numeric" value={draft} onChange={event => setDraftQuantities(previous => ({ ...previous, [product.id]: event.target.value }))}/>
-                    <button type="button" disabled={!canAdd} onClick={() => void addToCart(product, Number(draft))}>Add</button>
+                    <button type="button" disabled={!stockKnown || !canAdd} onClick={() => void addToCart(product, Number(draft))}>Add</button>
                   </div>
                 </div>
               </article>;
@@ -419,7 +425,7 @@ function CashierWorkspace({
         <div className="staff-modal-heading"><div><p className="staff-kicker">PAYMENT</p><h2 id="staff-checkout-title">Complete sale</h2></div><button type="button" className="staff-close-btn" aria-label="Close checkout" disabled={busy} onClick={() => setCheckoutOpen(false)}><Icon name="close"/></button></div>
         <div className="staff-payment-total"><span>Amount due</span><strong>{money(totals.totalMinor)}</strong></div>
         <label className="staff-modal-field"><span>Payment method</span><select value={paymentMethod} onChange={event => setPaymentMethod(event.target.value as PaymentMethod)}><option value="cash">Cash</option><option value="transfer">Bank transfer</option><option value="card">Card / POS terminal</option><option value="bank">Bank</option></select></label>
-        {paymentMethod === 'transfer' && <p className="staff-payment-hint">Confirm that the funds have reached the business account before completing this sale. This records the selected payment method; it does not independently verify a bank transaction.</p>}
+        {(paymentMethod === 'transfer' || paymentMethod === 'bank') && <p className="staff-payment-hint">Confirm that the funds have reached the business account before completing this sale. This records the selected payment method; it does not independently verify a bank transaction.</p>}
         {paymentMethod === 'card' && <p className="staff-payment-hint">Complete the card payment on the connected terminal before recording the sale. This screen does not initiate or verify a card charge.</p>}
         <div className="staff-checkout-lines">{cartLines.map(line => <div key={line.product.id}><span>{line.quantity} × {line.product.name}</span><strong>{money(line.product.retailPriceMinor * line.quantity)}</strong></div>)}</div>
         <button type="button" className="staff-checkout-confirm" disabled={busy || !cart.length} onClick={() => void completeCheckout()}>{busy ? 'Recording sale…' : `Confirm sale · ${money(totals.totalMinor)}`}</button>
